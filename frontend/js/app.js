@@ -71,16 +71,19 @@ async function loadBooks() {
     booksGrid.innerHTML = items.map((book) => `
       <div class="col-sm-6 col-lg-4">
         <div class="card h-100 book-card">
-          <div class="book-cover-placeholder">
-            <i class="bi bi-journal-bookmark fs-1 mb-2"></i>
-            <span class="badge bg-dark badge-formato">${book.formato}</span>
+          <div class="book-cover-wrapper">
+            ${book.portada_url
+              ? `<img src="${book.portada_url}" alt="${book.titulo}" class="book-cover-img" onerror="this.outerHTML='<div class=\\'book-cover-placeholder\\'><i class=\\'bi bi-journal-bookmark fs-1 mb-2\\'></i><span class=\\'small\\'>Sin portada</span></div>'">`
+              : `<div class="book-cover-placeholder"><i class="bi bi-journal-bookmark fs-1 mb-2"></i><span class="small fw-medium">${book.categoria_nombre || 'Puertas del Saber'}</span></div>`
+            }
+            <span class="badge badge-formato">${book.formato}</span>
           </div>
           <div class="card-body d-flex flex-column">
             <div class="d-flex justify-content-between align-items-start mb-1">
               <span class="badge bg-secondary-subtle text-dark">${book.categoria_nombre || 'General'}</span>
               <span class="small text-warning fw-semibold"><i class="bi bi-star-fill"></i> ${book.calificacion_promedio}</span>
             </div>
-            <h5 class="card-title fw-bold mb-1">${book.titulo}</h5>
+            <h5 class="card-title book-title fw-bold mb-1">${book.titulo}</h5>
             <p class="text-muted small mb-2">${book.autor_nombre || 'Autor por definir'}</p>
             <p class="card-text small text-secondary flex-grow-1">${book.sinopsis ? book.sinopsis.slice(0, 95) + '...' : ''}</p>
             <div class="border-top pt-2 mt-2">
@@ -228,9 +231,14 @@ async function openBookDetail(bookId) {
       : '<p class="small text-muted">Aun no hay resenas para este libro.</p>';
 
     body.innerHTML = `
-      <p><strong>Autor:</strong> ${book.autor_nombre || 'N/A'} | <strong>Editorial:</strong> ${book.editorial_nombre || 'N/A'}</p>
-      <p><strong>ISBN:</strong> ${book.isbn || 'N/A'} | <strong>Formato:</strong> ${book.formato} | <strong>Stock fisico:</strong> ${book.stock_fisico}</p>
-      <p>${book.sinopsis || 'Sin descripcion disponible.'}</p>
+      <div class="row g-3 mb-3">
+        ${book.portada_url ? `<div class="col-md-4"><img src="${book.portada_url}" alt="${book.titulo}" class="img-fluid rounded border"></div>` : ''}
+        <div class="${book.portada_url ? 'col-md-8' : 'col-12'}">
+          <p><strong>Autor:</strong> ${book.autor_nombre || 'N/A'} | <strong>Editorial:</strong> ${book.editorial_nombre || 'N/A'}</p>
+          <p><strong>ISBN:</strong> ${book.isbn || 'N/A'} | <strong>Formato:</strong> ${book.formato} | <strong>Stock fisico:</strong> ${book.stock_fisico}</p>
+          <p>${book.sinopsis || 'Sin descripcion disponible.'}</p>
+        </div>
+      </div>
       <hr>
       <h6 class="fw-bold">Resenas (${book.total_resenas})</h6>
       <div class="mb-3">${reviewsHtml}</div>
