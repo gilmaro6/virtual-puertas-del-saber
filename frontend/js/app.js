@@ -373,7 +373,13 @@ document.getElementById('checkoutForm').addEventListener('submit', async (e) => 
     bootstrap.Offcanvas.getInstance(document.getElementById('cartOffcanvas')).hide();
     await loadCart();
     await loadBooks();
-    showAlert(`Pedido <strong>${res.data.numero_orden}</strong> confirmado por ${formatCurrency(res.data.total)}.`, 'success');
+    showAlert(
+      `Pedido <strong>${res.data.numero_orden}</strong> confirmado por ${formatCurrency(res.data.total)}.
+       <a href="factura.html?orderId=${res.data.id}" target="_blank" class="alert-link ms-2">
+         <i class="bi bi-printer"></i> Ver e imprimir factura
+       </a>`,
+      'success'
+    );
   } catch (error) {
     showAlert(error.message, 'danger');
   }
@@ -400,9 +406,14 @@ document.getElementById('openAccountBtn').addEventListener('click', async (e) =>
             <td><span class="badge bg-primary">${o.estado}</span></td>
             <td>${o.metodo_pago || '-'}</td>
             <td>${formatCurrency(o.total)}</td>
+            <td>
+              <a href="factura.html?orderId=${o.id}" target="_blank" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-receipt"></i> ${o.numero_factura || 'Ver'}
+              </a>
+            </td>
           </tr>
         `).join('')
-      : '<tr><td colspan="5" class="text-center text-muted">No tienes pedidos registrados.</td></tr>';
+      : '<tr><td colspan="6" class="text-center text-muted">No tienes pedidos registrados.</td></tr>';
 
     const rentalsHtml = rentalsRes.data.length > 0
       ? rentalsRes.data.map((r) => `
@@ -419,7 +430,7 @@ document.getElementById('openAccountBtn').addEventListener('click', async (e) =>
       <h6 class="fw-bold">Mis Pedidos</h6>
       <div class="table-responsive mb-4">
         <table class="table table-sm table-bordered">
-          <thead><tr><th>Orden</th><th>Fecha</th><th>Estado</th><th>Pago</th><th>Total</th></tr></thead>
+          <thead><tr><th>Orden</th><th>Fecha</th><th>Estado</th><th>Pago</th><th>Total</th><th>Factura</th></tr></thead>
           <tbody>${ordersHtml}</tbody>
         </table>
       </div>

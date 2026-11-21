@@ -81,11 +81,21 @@ async function getAuditHistory(req, res, next) {
   }
 }
 
+async function getOrderInvoice(req, res, next) {
+  try {
+    const invoice = await orderService.getOrderInvoice(req.params.id, req.user.id, req.user.rol);
+    res.status(200).json({ status: 'ok', data: invoice });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   createOrder,
   getMyOrders,
   getMyRentals,
   getOrderById,
+  getOrderInvoice,
   listAllOrders,
   updateOrderStatus,
   returnRental,

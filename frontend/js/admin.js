@@ -469,6 +469,11 @@ async function loadAdminOrders() {
       <td>${formatCurrency(o.total)}</td>
       <td><span class="badge bg-primary">${o.estado}</span></td>
       <td>
+        <a href="factura.html?orderId=${o.id}" target="_blank" class="btn btn-sm btn-outline-primary">
+          <i class="bi bi-receipt"></i> ${o.numero_factura || 'Ver'}
+        </a>
+      </td>
+      <td>
         <select class="form-select form-select-sm" onchange="changeOrderStatus('${o.id}', this.value)">
           ${states.map((s) => `<option value="${s}" ${s === o.estado ? 'selected' : ''}>${s}</option>`).join('')}
         </select>

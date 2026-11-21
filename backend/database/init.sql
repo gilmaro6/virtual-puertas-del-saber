@@ -279,6 +279,28 @@ CREATE TABLE IF NOT EXISTS pagos (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS facturas (
+  id CHAR(36) NOT NULL,
+  consecutivo INT NOT NULL AUTO_INCREMENT,
+  numero_factura VARCHAR(20) NOT NULL,
+  pedido_id CHAR(36) NOT NULL,
+  subtotal_exento DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  subtotal_gravado DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  iva_porcentaje DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+  iva_valor DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  total DECIMAL(10, 2) NOT NULL,
+  nota_fiscal VARCHAR(255) NOT NULL DEFAULT 'Bienes exentos de IVA - Art. 478 del Estatuto Tributario',
+  fecha_emision TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_facturas_consecutivo (consecutivo),
+  UNIQUE KEY uk_facturas_numero (numero_factura),
+  UNIQUE KEY uk_facturas_pedido (pedido_id),
+  CONSTRAINT fk_facturas_pedido
+    FOREIGN KEY (pedido_id) REFERENCES pedidos (id)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ==========================================================
 -- 4. MODULO DE HISTORIAL, INVENTARIO Y AUDITORIA
 -- ==========================================================

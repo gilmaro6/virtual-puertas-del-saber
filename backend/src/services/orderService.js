@@ -129,6 +129,18 @@ async function createOrder(usuarioId, { metodo_pago = 'TARJETA', direccion_envio
       [uuidv4(), orderId, estadoInicial, usuarioId]
     );
 
+    const [maxRows] = await connection.query(
+      'SELECT COALESCE(MAX(consecutivo), 0) AS max_num FROM facturas FOR UPDATE'
+    );
+    const nextConsecutivo = maxRows[0].max_num + 1;
+    const numeroFactura = `FV-${String(nextConsecutivo).padStart(4, '0')}`;
+
+    await connection.query(
+      `INSERT INTO facturas (id, consecutivo, numero_factura, pedido_id, subtotal_exento, subtotal_gravado, iva_porcentaje, iva_valor, total)
+       VALUES (?, ?, ?, ?, ?, 0.00, 0.00, 0.00, ?)`,
+      [uuidv4(), nextConsecutivo, numeroFactura, orderId, subtotalPedido, total]
+    );
+
     await connection.query('DELETE FROM carrito_items WHERE usuario_id = ?', [usuarioId]);
 
     await connection.commit();
@@ -153,9 +165,10 @@ async function createOrder(usuarioId, { metodo_pago = 'TARJETA', direccion_envio
 
 async function getMyOrders(usuarioId) {
   const [rows] = await pool.query(
-    `SELECT p.*, pg.metodo_pago, pg.estado AS estado_pago
+    `SELECT p.*, pg.metodo_pago, pg.estado AS estado_pago, f.numero_factura
      FROM pedidos p
      LEFT JOIN pagos pg ON p.id = pg.pedido_id
+     LEFT JOIN facturas f ON p.id = f.pedido_id
      WHERE p.usuario_id = ?
      ORDER BY p.creado_en DESC`,
     [usuarioId]
@@ -232,9 +245,11 @@ async function listAllOrders({ estado }) {
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const [rows] = await pool.query(
-    `SELECT p.*, u.nombre AS cliente_nombre, u.apellido AS cliente_apellido, u.email AS cliente_email
+    `SELECT p.*, u.nombre AS cliente_nombre, u.apellido AS cliente_apellido, u.email AS cliente_email,
+            f.numero_factura
      FROM pedidos p
      INNER JOIN usuarios u ON p.usuario_id = u.id
+     LEFT JOIN facturas f ON p.id = f.pedido_id
      ${whereClause}
      ORDER BY p.creado_en DESC`,
     params
@@ -375,11 +390,81 @@ async function getAuditHistory(limit = 50) {
   return rows;
 }
 
+async function getOrderInvoice(orderId, usuarioId, rol) {
+  const [orders] = await pool.query(
+    `SELECT p.*, u.nombre AS cliente_nombre, u.apellido AS cliente_apellido,
+            u.email AS cliente_email, u.telefono AS cliente_telefono,
+            u.documento_identidad AS cliente_documento
+     FROM pedidos p
+     INNER JOIN usuarios u ON p.usuario_id = u.id
+     WHERE p.id = ?`,
+    [orderId]
+  );
+
+  if (orders.length === 0) {
+    throw new AppError('Pedido no encontrado', 404);
+  }
+
+  const order = orders[0];
+  if (rol !== 'ADMIN' && order.usuario_id !== usuarioId) {
+    throw new AppError('No tienes permisos para consultar esta factura', 403);
+  }
+
+  const [facturas] = await pool.query('SELECT * FROM facturas WHERE pedido_id = ?', [orderId]);
+  if (facturas.length === 0) {
+    throw new AppError('Factura no encontrada para este pedido', 404);
+  }
+
+  const [items] = await pool.query(
+    `SELECT dp.*, l.titulo, l.isbn, f.nombre AS formato_nombre, f.codigo AS formato
+     FROM detalle_pedidos dp
+     INNER JOIN libros l ON dp.libro_id = l.id
+     INNER JOIN formatos f ON l.formato_id = f.id
+     WHERE dp.pedido_id = ?`,
+    [orderId]
+  );
+
+  const [pagos] = await pool.query('SELECT * FROM pagos WHERE pedido_id = ?', [orderId]);
+
+  return {
+    libreria: {
+      nombre: 'Libreria Virtual Danzara',
+      nit: '901.450.320-1',
+      regimen: 'Regimen Comun - Venta de Libros',
+      direccion: 'Carrera 5 # 12-34, Centro',
+      telefono: '+57 310 555 0198',
+      correo: 'contacto@libreriadanzara.com'
+    },
+    factura: facturas[0],
+    pedido: {
+      id: order.id,
+      numero_orden: order.numero_orden,
+      estado: order.estado,
+      direccion_envio: order.direccion_envio,
+      ciudad: order.ciudad,
+      notas: order.notas,
+      creado_en: order.creado_en
+    },
+    cliente: {
+      nombre: `${order.cliente_nombre} ${order.cliente_apellido}`.trim(),
+      email: order.cliente_email,
+      telefono: order.cliente_telefono,
+      documento_identidad: order.cliente_documento
+    },
+    pago: pagos[0] || null,
+    items: items.map((item) => ({
+      ...item,
+      iva_porcentaje: 0
+    }))
+  };
+}
+
 module.exports = {
   createOrder,
   getMyOrders,
   getMyRentals,
   getOrderById,
+  getOrderInvoice,
   listAllOrders,
   updateOrderStatus,
   returnRental,

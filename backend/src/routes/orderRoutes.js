@@ -18,7 +18,8 @@ router.get('/', requireRole('ADMIN'), orderController.listAllOrders);
 router.patch('/:id/status', requireRole('ADMIN'), orderController.updateOrderStatus);
 router.patch('/rentals/:rentalId/return', requireRole('ADMIN'), orderController.returnRental);
 
-// Detalle de un pedido (dueno o ADMIN)
+// Detalle y factura de un pedido (dueno o ADMIN)
+router.get('/:id/invoice', orderController.getOrderInvoice);
 router.get('/:id', orderController.getOrderById);
 
 module.exports = router;
