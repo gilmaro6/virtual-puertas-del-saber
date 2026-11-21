@@ -6,12 +6,28 @@ const formatFilter = document.getElementById('formatFilter');
 const searchInput = document.getElementById('searchInput');
 
 function showAlert(message, type = 'info', target = alertContainer) {
-  target.innerHTML = `
-    <div class="alert alert-${type} alert-dismissible fade show" role="alert">
-      ${message}
-      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-  `;
+  if (target !== alertContainer) {
+    target.innerHTML = `
+      <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    `;
+    return;
+  }
+
+  const toastEl = document.getElementById('liveToast');
+  const toastBody = document.getElementById('liveToastBody');
+  const bgMap = {
+    success: 'text-bg-success',
+    danger: 'text-bg-danger',
+    warning: 'text-bg-warning',
+    info: 'text-bg-dark'
+  };
+
+  toastEl.className = `toast align-items-center border-0 shadow ${bgMap[type] || 'text-bg-dark'}`;
+  toastBody.innerHTML = message;
+  bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000 }).show();
 }
 
 function updateAuthUI() {
@@ -101,11 +117,14 @@ async function loadBooks() {
                 <span>Alquiler: <strong>${formatCurrency(book.precio_alquiler)}</strong></span>
               </div>
               <div class="d-flex gap-1">
-                <button class="btn btn-pds btn-sm flex-grow-1" onclick="addToCart('${book.id}', 'COMPRA')">
-                  <i class="bi bi-bag-plus"></i> Comprar
+                <button class="btn btn-pds btn-sm flex-grow-1" onclick="addToCart('${book.id}', 'COMPRA', true)">
+                  <i class="bi bi-bag-check"></i> Comprar
                 </button>
-                <button class="btn btn-outline-primary btn-sm" onclick="addToCart('${book.id}', 'ALQUILER')">
+                <button class="btn btn-outline-primary btn-sm" onclick="addToCart('${book.id}', 'ALQUILER', true)">
                   Alquilar
+                </button>
+                <button class="btn btn-gold btn-sm" onclick="addToCart('${book.id}', 'COMPRA', false)" title="Agregar al carrito y seguir viendo">
+                  <i class="bi bi-cart-plus"></i>
                 </button>
                 <button class="btn btn-outline-secondary btn-sm" onclick="openBookDetail('${book.id}')" title="Ver detalle">
                   <i class="bi bi-eye"></i>
@@ -173,7 +192,7 @@ async function loadCart() {
   }
 }
 
-async function addToCart(bookId, tipo) {
+async function addToCart(bookId, tipo, openCart = false) {
   if (!getToken()) {
     const modal = new bootstrap.Modal(document.getElementById('authModal'));
     modal.show();
@@ -186,7 +205,11 @@ async function addToCart(bookId, tipo) {
       body: JSON.stringify({ libro_id: bookId, tipo_operacion: tipo, cantidad: 1 })
     });
     await loadCart();
-    showAlert('Libro agregado al carrito correctamente.', 'success');
+    if (openCart) {
+      bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('cartOffcanvas')).show();
+    } else {
+      showAlert('Libro agregado al carrito.', 'success');
+    }
   } catch (error) {
     showAlert(error.message, 'danger');
   }
