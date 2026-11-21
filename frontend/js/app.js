@@ -83,7 +83,7 @@ async function loadBooks() {
           <div class="book-cover-wrapper">
             ${book.portada_url
               ? `<img src="${book.portada_url}" alt="${book.titulo}" class="book-cover-img" onerror="this.outerHTML='<div class=\\'book-cover-placeholder\\'><i class=\\'bi bi-journal-bookmark fs-1 mb-2\\'></i><span class=\\'small\\'>Sin portada</span></div>'">`
-              : `<div class="book-cover-placeholder"><i class="bi bi-journal-bookmark fs-1 mb-2"></i><span class="small fw-medium">${book.categoria_nombre || 'Puertas del Saber'}</span></div>`
+              : `<div class="book-cover-placeholder"><i class="bi bi-journal-bookmark fs-1 mb-2"></i><span class="small fw-medium">${book.categoria_nombre || 'Danzara'}</span></div>`
             }
             <span class="badge badge-formato">${book.formato}</span>
           </div>

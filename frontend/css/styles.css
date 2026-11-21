@@ -35,6 +35,25 @@ a:hover {
   color: var(--pds-primary);
 }
 
+.brand-logo {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 2px solid var(--pds-accent);
+  background-color: var(--pds-surface);
+}
+
+.hero-emblem {
+  width: 140px;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 1rem;
+  border: 3px solid var(--pds-accent);
+  background-color: var(--pds-surface);
+  box-shadow: 0 0.5rem 1.25rem rgba(0, 0, 0, 0.25);
+}
+
 .navbar-pds {
   background-color: var(--pds-primary);
   border-bottom: 3px solid var(--pds-accent);
