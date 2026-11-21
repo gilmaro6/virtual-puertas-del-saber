@@ -1,0 +1,66 @@
+:root {
+  --pds-primary: #1b365d;
+  --pds-secondary: #2c5282;
+  --pds-accent: #c59b27;
+  --pds-bg: #f8f9fa;
+}
+
+body {
+  background-color: var(--pds-bg);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.navbar-pds {
+  background-color: var(--pds-primary);
+}
+
+.hero-pds {
+  background: linear-gradient(135deg, var(--pds-primary) 0%, var(--pds-secondary) 100%);
+  color: #ffffff;
+  border-radius: 0.75rem;
+}
+
+.book-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid #e9ecef;
+}
+
+.book-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 0.5rem 1.25rem rgba(27, 54, 93, 0.12);
+}
+
+.book-cover-placeholder {
+  height: 190px;
+  background: linear-gradient(160deg, #edf2f7 0%, #e2e8f0 100%);
+  color: var(--pds-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  text-align: center;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.badge-formato {
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+}
+
+.price-tag {
+  color: var(--pds-primary);
+  font-weight: 700;
+}
+
+.btn-pds {
+  background-color: var(--pds-primary);
+  border-color: var(--pds-primary);
+  color: #fff;
+}
+
+.btn-pds:hover {
+  background-color: var(--pds-secondary);
+  border-color: var(--pds-secondary);
+  color: #fff;
+}
