@@ -8,6 +8,9 @@ const { morganStream } = require('./config/logger');
 const { apiLimiter } = require('./middlewares/rateLimiter');
 const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
 const authRoutes = require('./routes/authRoutes');
+const bookRoutes = require('./routes/bookRoutes');
+const cartRoutes = require('./routes/cartRoutes');
+const orderRoutes = require('./routes/orderRoutes');
 
 const app = express();
 
@@ -51,6 +54,9 @@ app.get('/api/health', async (req, res) => {
 
 // Rutas principales
 app.use('/api/auth', authRoutes);
+app.use('/api/books', bookRoutes);
+app.use('/api/cart', cartRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Manejo de rutas no encontradas y errores centralizados
 app.use(notFoundHandler);
