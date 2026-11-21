@@ -5,6 +5,7 @@ const { authLimiter } = require('../middlewares/rateLimiter');
 
 const router = express.Router();
 
+router.get('/captcha', authController.getCaptcha);
 router.post('/register', authLimiter, authController.register);
 router.post('/login', authLimiter, authController.login);
 router.get('/profile', verifyToken, authController.getProfile);

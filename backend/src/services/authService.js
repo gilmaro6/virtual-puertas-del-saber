@@ -17,7 +17,42 @@ function generateAccessToken(user) {
   );
 }
 
-async function register({ nombre, apellido, email, password, telefono = null, documentoIdentidad = null }, ipOrigen) {
+function generateCaptcha() {
+  const a = Math.floor(Math.random() * 12) + 2;
+  const b = Math.floor(Math.random() * 9) + 1;
+  const isSum = Math.random() >= 0.4;
+  const answer = isSum ? a + b : a - b;
+  const question = isSum ? `¿Cuanto es ${a} + ${b}?` : `¿Cuanto es ${a} - ${b}?`;
+
+  const captchaToken = jwt.sign(
+    { answer: String(answer), type: 'captcha' },
+    JWT_SECRET,
+    { expiresIn: '5m' }
+  );
+
+  return { captchaToken, question };
+}
+
+function verifyCaptcha(captchaToken, captchaAnswer) {
+  if (!captchaToken || captchaAnswer === undefined || captchaAnswer === null || String(captchaAnswer).trim() === '') {
+    throw new AppError('Debes completar la verificacion de seguridad', 400);
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(captchaToken, JWT_SECRET);
+  } catch {
+    throw new AppError('La verificacion de seguridad expiro. Recarga el reto.', 400);
+  }
+
+  if (decoded.type !== 'captcha' || String(captchaAnswer).trim() !== decoded.answer) {
+    throw new AppError('Respuesta de verificacion de seguridad incorrecta', 400);
+  }
+}
+
+async function register({ nombre, apellido, email, password, telefono = null, documentoIdentidad = null, captchaToken, captchaAnswer }, ipOrigen) {
+  verifyCaptcha(captchaToken, captchaAnswer);
+
   if (!nombre || !apellido || !email || !password) {
     throw new AppError('Nombre, apellido, correo y contrasena son obligatorios', 400);
   }
@@ -82,7 +117,9 @@ async function register({ nombre, apellido, email, password, telefono = null, do
   return { user, token };
 }
 
-async function login({ email, password }, ipOrigen) {
+async function login({ email, password, captchaToken, captchaAnswer }, ipOrigen) {
+  verifyCaptcha(captchaToken, captchaAnswer);
+
   if (!email || !password) {
     throw new AppError('Correo y contrasena son obligatorios', 400);
   }
@@ -234,6 +271,7 @@ async function logout(usuarioId, ipOrigen) {
 }
 
 module.exports = {
+  generateCaptcha,
   register,
   login,
   getProfile,

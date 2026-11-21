@@ -1,5 +1,13 @@
 const authService = require('../services/authService');
 
+function getCaptcha(req, res) {
+  const captcha = authService.generateCaptcha();
+  res.status(200).json({
+    status: 'ok',
+    data: captcha
+  });
+}
+
 async function register(req, res, next) {
   try {
     const result = await authService.register(req.body, req.ip);
@@ -76,6 +84,7 @@ function checkAdminAccess(req, res) {
 }
 
 module.exports = {
+  getCaptcha,
   register,
   login,
   getProfile,

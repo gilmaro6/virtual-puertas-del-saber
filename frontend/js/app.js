@@ -319,6 +319,35 @@ async function submitReview(event, bookId) {
   }
 }
 
+let currentLoginCaptchaToken = '';
+let currentRegCaptchaToken = '';
+
+async function loadAuthCaptcha(mode = 'both') {
+  try {
+    if (mode === 'login' || mode === 'both') {
+      const res = await apiRequest('/auth/captcha');
+      currentLoginCaptchaToken = res.data.captchaToken;
+      document.getElementById('loginCaptchaQuestion').textContent = res.data.question;
+      document.getElementById('loginCaptchaAnswer').value = '';
+    }
+    if (mode === 'register' || mode === 'both') {
+      const res = await apiRequest('/auth/captcha');
+      currentRegCaptchaToken = res.data.captchaToken;
+      document.getElementById('regCaptchaQuestion').textContent = res.data.question;
+      document.getElementById('regCaptchaAnswer').value = '';
+    }
+  } catch {
+    // Silenciar si falla al abrir inicialmente
+  }
+}
+
+document.getElementById('authModal').addEventListener('show.bs.modal', () => {
+  document.getElementById('authAlert').innerHTML = '';
+  loadAuthCaptcha('both');
+});
+document.getElementById('refreshLoginCaptcha').addEventListener('click', () => loadAuthCaptcha('login'));
+document.getElementById('refreshRegCaptcha').addEventListener('click', () => loadAuthCaptcha('register'));
+
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const authAlert = document.getElementById('authAlert');
@@ -327,7 +356,9 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
       method: 'POST',
       body: JSON.stringify({
         email: document.getElementById('loginEmail').value,
-        password: document.getElementById('loginPassword').value
+        password: document.getElementById('loginPassword').value,
+        captchaToken: currentLoginCaptchaToken,
+        captchaAnswer: document.getElementById('loginCaptchaAnswer').value
       })
     });
     saveSession(res.data.token, res.data.user);
@@ -337,6 +368,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     showAlert(`Bienvenido, ${res.data.user.nombre}.`, 'success');
   } catch (error) {
     showAlert(error.message, 'danger', authAlert);
+    loadAuthCaptcha('login');
   }
 });
 
@@ -351,7 +383,9 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
         apellido: document.getElementById('regApellido').value,
         email: document.getElementById('regEmail').value,
         telefono: document.getElementById('regTelefono').value,
-        password: document.getElementById('regPassword').value
+        password: document.getElementById('regPassword').value,
+        captchaToken: currentRegCaptchaToken,
+        captchaAnswer: document.getElementById('regCaptchaAnswer').value
       })
     });
     saveSession(res.data.token, res.data.user);
@@ -361,6 +395,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     showAlert('Cuenta creada correctamente.', 'success');
   } catch (error) {
     showAlert(error.message, 'danger', authAlert);
+    loadAuthCaptcha('register');
   }
 });
 
