@@ -3,6 +3,30 @@ const { pool } = require('../config/database');
 const AppError = require('../utils/appError');
 const { logAudit } = require('./auditService');
 
+function buildSlug(text) {
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+async function ensureNoBooksLinked(column, id, entityLabel) {
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS total FROM libros WHERE ${column} = ?`,
+    [id]
+  );
+  const total = rows[0].total;
+  if (total > 0) {
+    throw new AppError(
+      `No se puede modificar ni eliminar ${entityLabel} porque tiene ${total} libro(s) asociado(s)`,
+      409
+    );
+  }
+}
+
 async function listBooks({ q, categoria, formato, estado, page = 1, limit = 12 }) {
   const conditions = [];
   const params = [];
@@ -19,8 +43,8 @@ async function listBooks({ q, categoria, formato, estado, page = 1, limit = 12 }
   }
 
   if (formato) {
-    conditions.push('formato = ?');
-    params.push(formato);
+    conditions.push('(formato_id = ? OR formato = ?)');
+    params.push(formato, formato);
   }
 
   if (estado) {
@@ -82,16 +106,37 @@ async function getBookById(id) {
 
 async function getCatalogMetadata() {
   const [categorias] = await pool.query(
-    'SELECT id, nombre, slug, descripcion FROM categorias WHERE activo = 1 ORDER BY nombre ASC'
+    `SELECT c.id, c.nombre, c.slug, c.descripcion, COUNT(l.id) AS libros_asociados
+     FROM categorias c
+     LEFT JOIN libros l ON l.categoria_id = c.id
+     WHERE c.activo = 1
+     GROUP BY c.id, c.nombre, c.slug, c.descripcion
+     ORDER BY c.nombre ASC`
   );
   const [autores] = await pool.query(
-    'SELECT id, nombre, nacionalidad FROM autores ORDER BY nombre ASC'
+    `SELECT a.id, a.nombre, a.nacionalidad, COUNT(l.id) AS libros_asociados
+     FROM autores a
+     LEFT JOIN libros l ON l.autor_id = a.id
+     GROUP BY a.id, a.nombre, a.nacionalidad
+     ORDER BY a.nombre ASC`
   );
   const [editoriales] = await pool.query(
-    'SELECT id, nombre, pais FROM editoriales ORDER BY nombre ASC'
+    `SELECT e.id, e.nombre, e.pais, COUNT(l.id) AS libros_asociados
+     FROM editoriales e
+     LEFT JOIN libros l ON l.editorial_id = e.id
+     GROUP BY e.id, e.nombre, e.pais
+     ORDER BY e.nombre ASC`
+  );
+  const [formatos] = await pool.query(
+    `SELECT f.id, f.codigo, f.nombre, f.descripcion, f.requiere_stock, COUNT(l.id) AS libros_asociados
+     FROM formatos f
+     LEFT JOIN libros l ON l.formato_id = f.id
+     WHERE f.activo = 1
+     GROUP BY f.id, f.codigo, f.nombre, f.descripcion, f.requiere_stock
+     ORDER BY f.nombre ASC`
   );
 
-  return { categorias, autores, editoriales };
+  return { categorias, autores, editoriales, formatos };
 }
 
 async function createBook(data, usuarioId, ipOrigen) {
@@ -102,7 +147,7 @@ async function createBook(data, usuarioId, ipOrigen) {
     anio_publicacion = null,
     idioma = 'Espanol',
     paginas = null,
-    formato = 'AMBOS',
+    formato_id,
     precio_venta,
     precio_alquiler = 0,
     stock_fisico = 0,
@@ -114,8 +159,13 @@ async function createBook(data, usuarioId, ipOrigen) {
     editorial_id = null
   } = data;
 
-  if (!titulo || precio_venta === undefined) {
-    throw new AppError('El titulo y el precio de venta son obligatorios', 400);
+  if (!titulo || precio_venta === undefined || !formato_id) {
+    throw new AppError('El titulo, formato y precio de venta son obligatorios', 400);
+  }
+
+  const [formats] = await pool.query('SELECT id, requiere_stock FROM formatos WHERE id = ?', [formato_id]);
+  if (formats.length === 0) {
+    throw new AppError('Formato seleccionado no existe', 400);
   }
 
   if (isbn) {
@@ -127,7 +177,7 @@ async function createBook(data, usuarioId, ipOrigen) {
 
   const id = uuidv4();
   const stockNum = Math.max(Number(stock_fisico) || 0, 0);
-  const estadoInicial = formato !== 'DIGITAL' && stockNum === 0 ? 'AGOTADO' : 'DISPONIBLE';
+  const estadoInicial = formats[0].requiere_stock && stockNum === 0 ? 'AGOTADO' : 'DISPONIBLE';
 
   const connection = await pool.getConnection();
   try {
@@ -135,7 +185,7 @@ async function createBook(data, usuarioId, ipOrigen) {
 
     await connection.query(
       `INSERT INTO libros (
-        id, titulo, isbn, sinopsis, anio_publicacion, idioma, paginas, formato,
+        id, titulo, isbn, sinopsis, anio_publicacion, idioma, paginas, formato_id,
         precio_venta, precio_alquiler, stock_fisico, stock_minimo,
         portada_url, archivo_digital_url, categoria_id, autor_id, editorial_id, estado
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -147,7 +197,7 @@ async function createBook(data, usuarioId, ipOrigen) {
         anio_publicacion,
         idioma,
         paginas,
-        formato,
+        formato_id,
         Number(precio_venta),
         Number(precio_alquiler) || 0,
         stockNum,
@@ -196,11 +246,16 @@ async function updateBook(id, data, usuarioId, ipOrigen) {
   }
 
   const current = rows[0];
+  const nextFormatoId = data.formato_id || current.formato_id;
+  const [formats] = await pool.query('SELECT id, requiere_stock FROM formatos WHERE id = ?', [nextFormatoId]);
+  if (formats.length === 0) {
+    throw new AppError('Formato seleccionado no existe', 400);
+  }
+
   const nextStock = data.stock_fisico !== undefined ? Math.max(Number(data.stock_fisico), 0) : current.stock_fisico;
-  const nextFormato = data.formato || current.formato;
   let nextEstado = data.estado || current.estado;
 
-  if (!data.estado && nextFormato !== 'DIGITAL') {
+  if (!data.estado && formats[0].requiere_stock) {
     nextEstado = nextStock === 0 ? 'AGOTADO' : 'DISPONIBLE';
   }
 
@@ -211,7 +266,7 @@ async function updateBook(id, data, usuarioId, ipOrigen) {
     await connection.query(
       `UPDATE libros SET
         titulo = ?, isbn = ?, sinopsis = ?, anio_publicacion = ?, idioma = ?, paginas = ?,
-        formato = ?, precio_venta = ?, precio_alquiler = ?, stock_fisico = ?, stock_minimo = ?,
+        formato_id = ?, precio_venta = ?, precio_alquiler = ?, stock_fisico = ?, stock_minimo = ?,
         portada_url = ?, archivo_digital_url = ?, categoria_id = ?, autor_id = ?, editorial_id = ?, estado = ?
        WHERE id = ?`,
       [
@@ -221,7 +276,7 @@ async function updateBook(id, data, usuarioId, ipOrigen) {
         data.anio_publicacion !== undefined ? data.anio_publicacion : current.anio_publicacion,
         data.idioma !== undefined ? data.idioma : current.idioma,
         data.paginas !== undefined ? data.paginas : current.paginas,
-        nextFormato,
+        nextFormatoId,
         data.precio_venta !== undefined ? Number(data.precio_venta) : current.precio_venta,
         data.precio_alquiler !== undefined ? Number(data.precio_alquiler) : current.precio_alquiler,
         nextStock,
@@ -321,18 +376,11 @@ async function addOrUpdateReview(libroId, usuarioId, { calificacion, comentario 
   return getBookById(libroId);
 }
 
-async function createCategory({ nombre, descripcion = null }) {
-  if (!nombre) {
-    throw new AppError('El nombre de la categoria es obligatorio', 400);
-  }
-  const slug = nombre
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
+// --- Parametrizacion: Categorias ---
 
+async function createCategory({ nombre, descripcion = null }) {
+  if (!nombre) throw new AppError('El nombre de la categoria es obligatorio', 400);
+  const slug = buildSlug(nombre);
   const id = uuidv4();
   await pool.query(
     'INSERT INTO categorias (id, nombre, slug, descripcion) VALUES (?, ?, ?, ?)',
@@ -341,10 +389,36 @@ async function createCategory({ nombre, descripcion = null }) {
   return { id, nombre: nombre.trim(), slug, descripcion };
 }
 
+async function updateCategory(id, { nombre, descripcion = null }, usuarioId, ipOrigen) {
+  const [rows] = await pool.query('SELECT * FROM categorias WHERE id = ?', [id]);
+  if (rows.length === 0) throw new AppError('Categoria no encontrada', 404);
+
+  await ensureNoBooksLinked('categoria_id', id, 'esta categoria');
+
+  if (!nombre) throw new AppError('El nombre de la categoria es obligatorio', 400);
+  const slug = buildSlug(nombre);
+  await pool.query(
+    'UPDATE categorias SET nombre = ?, slug = ?, descripcion = ? WHERE id = ?',
+    [nombre.trim(), slug, descripcion, id]
+  );
+
+  await logAudit({ usuarioId, accion: 'ACTUALIZAR_CATEGORIA', entidad: 'categorias', entidadId: id, ipOrigen });
+  return { id, nombre: nombre.trim(), slug, descripcion };
+}
+
+async function deleteCategory(id, usuarioId, ipOrigen) {
+  const [rows] = await pool.query('SELECT id FROM categorias WHERE id = ?', [id]);
+  if (rows.length === 0) throw new AppError('Categoria no encontrada', 404);
+
+  await ensureNoBooksLinked('categoria_id', id, 'esta categoria');
+  await pool.query('DELETE FROM categorias WHERE id = ?', [id]);
+  await logAudit({ usuarioId, accion: 'ELIMINAR_CATEGORIA', entidad: 'categorias', entidadId: id, ipOrigen });
+}
+
+// --- Parametrizacion: Autores ---
+
 async function createAuthor({ nombre, nacionalidad = null, biografia = null }) {
-  if (!nombre) {
-    throw new AppError('El nombre del autor es obligatorio', 400);
-  }
+  if (!nombre) throw new AppError('El nombre del autor es obligatorio', 400);
   const id = uuidv4();
   await pool.query(
     'INSERT INTO autores (id, nombre, nacionalidad, biografia) VALUES (?, ?, ?, ?)',
@@ -353,16 +427,109 @@ async function createAuthor({ nombre, nacionalidad = null, biografia = null }) {
   return { id, nombre: nombre.trim(), nacionalidad, biografia };
 }
 
+async function updateAuthor(id, { nombre, nacionalidad = null, biografia = null }, usuarioId, ipOrigen) {
+  const [rows] = await pool.query('SELECT * FROM autores WHERE id = ?', [id]);
+  if (rows.length === 0) throw new AppError('Autor no encontrado', 404);
+
+  await ensureNoBooksLinked('autor_id', id, 'este autor');
+
+  if (!nombre) throw new AppError('El nombre del autor es obligatorio', 400);
+  await pool.query(
+    'UPDATE autores SET nombre = ?, nacionalidad = ?, biografia = ? WHERE id = ?',
+    [nombre.trim(), nacionalidad, biografia, id]
+  );
+
+  await logAudit({ usuarioId, accion: 'ACTUALIZAR_AUTOR', entidad: 'autores', entidadId: id, ipOrigen });
+  return { id, nombre: nombre.trim(), nacionalidad, biografia };
+}
+
+async function deleteAuthor(id, usuarioId, ipOrigen) {
+  const [rows] = await pool.query('SELECT id FROM autores WHERE id = ?', [id]);
+  if (rows.length === 0) throw new AppError('Autor no encontrado', 404);
+
+  await ensureNoBooksLinked('autor_id', id, 'este autor');
+  await pool.query('DELETE FROM autores WHERE id = ?', [id]);
+  await logAudit({ usuarioId, accion: 'ELIMINAR_AUTOR', entidad: 'autores', entidadId: id, ipOrigen });
+}
+
+// --- Parametrizacion: Editoriales ---
+
 async function createPublisher({ nombre, pais = null, sitio_web = null }) {
-  if (!nombre) {
-    throw new AppError('El nombre de la editorial es obligatorio', 400);
-  }
+  if (!nombre) throw new AppError('El nombre de la editorial es obligatorio', 400);
   const id = uuidv4();
   await pool.query(
     'INSERT INTO editoriales (id, nombre, pais, sitio_web) VALUES (?, ?, ?, ?)',
     [id, nombre.trim(), pais, sitio_web]
   );
   return { id, nombre: nombre.trim(), pais, sitio_web };
+}
+
+async function updatePublisher(id, { nombre, pais = null, sitio_web = null }, usuarioId, ipOrigen) {
+  const [rows] = await pool.query('SELECT * FROM editoriales WHERE id = ?', [id]);
+  if (rows.length === 0) throw new AppError('Editorial no encontrada', 404);
+
+  await ensureNoBooksLinked('editorial_id', id, 'esta editorial');
+
+  if (!nombre) throw new AppError('El nombre de la editorial es obligatorio', 400);
+  await pool.query(
+    'UPDATE editoriales SET nombre = ?, pais = ?, sitio_web = ? WHERE id = ?',
+    [nombre.trim(), pais, sitio_web, id]
+  );
+
+  await logAudit({ usuarioId, accion: 'ACTUALIZAR_EDITORIAL', entidad: 'editoriales', entidadId: id, ipOrigen });
+  return { id, nombre: nombre.trim(), pais, sitio_web };
+}
+
+async function deletePublisher(id, usuarioId, ipOrigen) {
+  const [rows] = await pool.query('SELECT id FROM editoriales WHERE id = ?', [id]);
+  if (rows.length === 0) throw new AppError('Editorial no encontrada', 404);
+
+  await ensureNoBooksLinked('editorial_id', id, 'esta editorial');
+  await pool.query('DELETE FROM editoriales WHERE id = ?', [id]);
+  await logAudit({ usuarioId, accion: 'ELIMINAR_EDITORIAL', entidad: 'editoriales', entidadId: id, ipOrigen });
+}
+
+// --- Parametrizacion: Formatos ---
+
+async function createFormat({ codigo, nombre, descripcion = null, requiere_stock = 1 }) {
+  if (!codigo || !nombre) {
+    throw new AppError('El codigo y el nombre del formato son obligatorios', 400);
+  }
+  const cleanCode = codigo.trim().toUpperCase().replace(/\s+/g, '_');
+  const id = uuidv4();
+  await pool.query(
+    'INSERT INTO formatos (id, codigo, nombre, descripcion, requiere_stock) VALUES (?, ?, ?, ?, ?)',
+    [id, cleanCode, nombre.trim(), descripcion, requiere_stock ? 1 : 0]
+  );
+  return { id, codigo: cleanCode, nombre: nombre.trim(), descripcion, requiere_stock: requiere_stock ? 1 : 0 };
+}
+
+async function updateFormat(id, { codigo, nombre, descripcion = null, requiere_stock = 1 }, usuarioId, ipOrigen) {
+  const [rows] = await pool.query('SELECT * FROM formatos WHERE id = ?', [id]);
+  if (rows.length === 0) throw new AppError('Formato no encontrado', 404);
+
+  await ensureNoBooksLinked('formato_id', id, 'este formato');
+
+  if (!codigo || !nombre) {
+    throw new AppError('El codigo y el nombre del formato son obligatorios', 400);
+  }
+  const cleanCode = codigo.trim().toUpperCase().replace(/\s+/g, '_');
+  await pool.query(
+    'UPDATE formatos SET codigo = ?, nombre = ?, descripcion = ?, requiere_stock = ? WHERE id = ?',
+    [cleanCode, nombre.trim(), descripcion, requiere_stock ? 1 : 0, id]
+  );
+
+  await logAudit({ usuarioId, accion: 'ACTUALIZAR_FORMATO', entidad: 'formatos', entidadId: id, ipOrigen });
+  return { id, codigo: cleanCode, nombre: nombre.trim(), descripcion, requiere_stock: requiere_stock ? 1 : 0 };
+}
+
+async function deleteFormat(id, usuarioId, ipOrigen) {
+  const [rows] = await pool.query('SELECT id FROM formatos WHERE id = ?', [id]);
+  if (rows.length === 0) throw new AppError('Formato no encontrado', 404);
+
+  await ensureNoBooksLinked('formato_id', id, 'este formato');
+  await pool.query('DELETE FROM formatos WHERE id = ?', [id]);
+  await logAudit({ usuarioId, accion: 'ELIMINAR_FORMATO', entidad: 'formatos', entidadId: id, ipOrigen });
 }
 
 module.exports = {
@@ -374,6 +541,15 @@ module.exports = {
   deleteBook,
   addOrUpdateReview,
   createCategory,
+  updateCategory,
+  deleteCategory,
   createAuthor,
-  createPublisher
+  updateAuthor,
+  deleteAuthor,
+  createPublisher,
+  updatePublisher,
+  deletePublisher,
+  createFormat,
+  updateFormat,
+  deleteFormat
 };

@@ -66,69 +66,97 @@
       <div class="tab-pane fade" id="paramsTab">
         <h4 class="fw-bold mb-3">Parametrizacion del Catalogo</h4>
         <div class="row g-4">
-          <div class="col-lg-4">
+          <div class="col-lg-6">
             <div class="card card-pds shadow-sm h-100">
               <div class="card-body">
                 <h5 class="fw-bold mb-3">Categorias</h5>
                 <form id="categoryForm" class="mb-3">
-                  <div class="mb-2">
-                    <input type="text" class="form-control form-control-sm" id="catNombre" placeholder="Nombre de categoria" required>
+                  <div class="row g-2">
+                    <div class="col-sm-5">
+                      <input type="text" class="form-control form-control-sm" id="catNombre" placeholder="Nombre de categoria" required>
+                    </div>
+                    <div class="col-sm-5">
+                      <input type="text" class="form-control form-control-sm" id="catDescripcion" placeholder="Descripcion breve">
+                    </div>
+                    <div class="col-sm-2">
+                      <button type="submit" class="btn btn-pds btn-sm w-100">Crear</button>
+                    </div>
                   </div>
-                  <div class="mb-2">
-                    <input type="text" class="form-control form-control-sm" id="catDescripcion" placeholder="Descripcion breve">
-                  </div>
-                  <button type="submit" class="btn btn-pds btn-sm w-100">Agregar Categoria</button>
                 </form>
                 <ul class="list-group list-group-flush small" id="categoriesList"></ul>
               </div>
             </div>
           </div>
 
-          <div class="col-lg-4">
+          <div class="col-lg-6">
             <div class="card card-pds shadow-sm h-100">
               <div class="card-body">
                 <h5 class="fw-bold mb-3">Autores</h5>
                 <form id="authorForm" class="mb-3">
-                  <div class="mb-2">
-                    <input type="text" class="form-control form-control-sm" id="authorNombre" placeholder="Nombre completo del autor" required>
+                  <div class="row g-2">
+                    <div class="col-sm-5">
+                      <input type="text" class="form-control form-control-sm" id="authorNombre" placeholder="Nombre del autor" required>
+                    </div>
+                    <div class="col-sm-5">
+                      <input type="text" class="form-control form-control-sm" id="authorNacionalidad" placeholder="Nacionalidad">
+                    </div>
+                    <div class="col-sm-2">
+                      <button type="submit" class="btn btn-pds btn-sm w-100">Crear</button>
+                    </div>
                   </div>
-                  <div class="mb-2">
-                    <input type="text" class="form-control form-control-sm" id="authorNacionalidad" placeholder="Nacionalidad">
-                  </div>
-                  <button type="submit" class="btn btn-pds btn-sm w-100">Agregar Autor</button>
                 </form>
                 <ul class="list-group list-group-flush small" id="authorsList"></ul>
               </div>
             </div>
           </div>
 
-          <div class="col-lg-4">
+          <div class="col-lg-6">
             <div class="card card-pds shadow-sm h-100">
               <div class="card-body">
                 <h5 class="fw-bold mb-3">Editoriales</h5>
                 <form id="publisherForm" class="mb-3">
-                  <div class="mb-2">
-                    <input type="text" class="form-control form-control-sm" id="pubNombre" placeholder="Nombre de la editorial" required>
+                  <div class="row g-2">
+                    <div class="col-sm-5">
+                      <input type="text" class="form-control form-control-sm" id="pubNombre" placeholder="Nombre de editorial" required>
+                    </div>
+                    <div class="col-sm-5">
+                      <input type="text" class="form-control form-control-sm" id="pubPais" placeholder="Pais">
+                    </div>
+                    <div class="col-sm-2">
+                      <button type="submit" class="btn btn-pds btn-sm w-100">Crear</button>
+                    </div>
                   </div>
-                  <div class="mb-2">
-                    <input type="text" class="form-control form-control-sm" id="pubPais" placeholder="Pais">
-                  </div>
-                  <button type="submit" class="btn btn-pds btn-sm w-100">Agregar Editorial</button>
                 </form>
                 <ul class="list-group list-group-flush small" id="publishersList"></ul>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="card card-pds shadow-sm mt-4">
-          <div class="card-body">
-            <h5 class="fw-bold mb-2">Formatos Permitidos en el Sistema</h5>
-            <p class="small text-muted mb-2">Los formatos disponibles al registrar o editar un libro son:</p>
-            <div class="d-flex flex-wrap gap-2">
-              <span class="badge bg-dark p-2">FISICO: Solo ejemplar impreso (controla stock fisico)</span>
-              <span class="badge bg-primary p-2">DIGITAL: Solo libro electronico (disponibilidad ilimitada)</span>
-              <span class="badge bg-success p-2">AMBOS: Disponible para compra o alquiler en ambos formatos</span>
+          <div class="col-lg-6">
+            <div class="card card-pds shadow-sm h-100">
+              <div class="card-body">
+                <h5 class="fw-bold mb-3">Formatos</h5>
+                <form id="formatForm" class="mb-3">
+                  <div class="row g-2">
+                    <div class="col-sm-3">
+                      <input type="text" class="form-control form-control-sm" id="fmtCodigo" placeholder="Codigo (ej. AUDIO)" required>
+                    </div>
+                    <div class="col-sm-4">
+                      <input type="text" class="form-control form-control-sm" id="fmtNombre" placeholder="Nombre (ej. Audiolibro)" required>
+                    </div>
+                    <div class="col-sm-3">
+                      <select class="form-select form-select-sm" id="fmtRequiereStock">
+                        <option value="1">Con stock</option>
+                        <option value="0">Sin stock</option>
+                      </select>
+                    </div>
+                    <div class="col-sm-2">
+                      <button type="submit" class="btn btn-pds btn-sm w-100">Crear</button>
+                    </div>
+                  </div>
+                </form>
+                <ul class="list-group list-group-flush small" id="formatsList"></ul>
+              </div>
             </div>
           </div>
         </div>
@@ -244,11 +272,7 @@
               </div>
               <div class="col-md-3">
                 <label class="form-label">Formato</label>
-                <select class="form-select" id="bookFormato">
-                  <option value="AMBOS">AMBOS</option>
-                  <option value="FISICO">FISICO</option>
-                  <option value="DIGITAL">DIGITAL</option>
-                </select>
+                <select class="form-select" id="bookFormato" required></select>
               </div>
               <div class="col-md-3">
                 <label class="form-label">Precio Venta</label>
@@ -353,6 +377,44 @@
               <input type="password" class="form-control" id="resetNewPassword" minlength="6" required>
             </div>
             <button type="submit" class="btn btn-gold w-100">Actualizar Contrasena</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Editar Parametrizacion -->
+  <div class="modal fade" id="paramEditModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold" id="paramEditTitle">Editar Elemento</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="paramEditForm">
+            <input type="hidden" id="paramType">
+            <input type="hidden" id="paramId">
+            <div class="mb-2 d-none" id="paramCodeGroup">
+              <label class="form-label">Codigo</label>
+              <input type="text" class="form-control" id="paramCode">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Nombre</label>
+              <input type="text" class="form-control" id="paramName" required>
+            </div>
+            <div class="mb-2">
+              <label class="form-label" id="paramExtraLabel">Detalle</label>
+              <input type="text" class="form-control" id="paramExtra">
+            </div>
+            <div class="mb-3 d-none" id="paramStockGroup">
+              <label class="form-label">Control de inventario</label>
+              <select class="form-select" id="paramStock">
+                <option value="1">Con control de stock fisico</option>
+                <option value="0">Sin stock fisico (digital)</option>
+              </select>
+            </div>
+            <button type="submit" class="btn btn-pds w-100">Guardar Cambios</button>
           </form>
         </div>
       </div>

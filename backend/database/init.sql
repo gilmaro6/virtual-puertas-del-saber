@@ -83,6 +83,19 @@ CREATE TABLE IF NOT EXISTS editoriales (
   UNIQUE KEY uk_editoriales_nombre (nombre)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS formatos (
+  id CHAR(36) NOT NULL,
+  codigo VARCHAR(30) NOT NULL,
+  nombre VARCHAR(60) NOT NULL,
+  descripcion VARCHAR(255) NULL,
+  requiere_stock TINYINT(1) NOT NULL DEFAULT 1,
+  activo TINYINT(1) NOT NULL DEFAULT 1,
+  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_formatos_codigo (codigo),
+  UNIQUE KEY uk_formatos_nombre (nombre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS libros (
   id CHAR(36) NOT NULL,
   titulo VARCHAR(200) NOT NULL,
@@ -91,7 +104,7 @@ CREATE TABLE IF NOT EXISTS libros (
   anio_publicacion SMALLINT NULL,
   idioma VARCHAR(30) NOT NULL DEFAULT 'Espanol',
   paginas INT NULL,
-  formato ENUM('FISICO', 'DIGITAL', 'AMBOS') NOT NULL DEFAULT 'AMBOS',
+  formato_id CHAR(36) NOT NULL,
   precio_venta DECIMAL(10, 2) NOT NULL,
   precio_alquiler DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
   stock_fisico INT NOT NULL DEFAULT 0,
@@ -107,21 +120,26 @@ CREATE TABLE IF NOT EXISTS libros (
   PRIMARY KEY (id),
   UNIQUE KEY uk_libros_isbn (isbn),
   KEY idx_libros_titulo (titulo),
+  KEY idx_libros_formato (formato_id),
   KEY idx_libros_categoria (categoria_id),
   KEY idx_libros_autor (autor_id),
   KEY idx_libros_editorial (editorial_id),
   KEY idx_libros_estado (estado),
+  CONSTRAINT fk_libros_formato
+    FOREIGN KEY (formato_id) REFERENCES formatos (id)
+    ON DELETE RESTRICT
+    ON UPDATE CASCADE,
   CONSTRAINT fk_libros_categoria
     FOREIGN KEY (categoria_id) REFERENCES categorias (id)
-    ON DELETE SET NULL
+    ON DELETE RESTRICT
     ON UPDATE CASCADE,
   CONSTRAINT fk_libros_autor
     FOREIGN KEY (autor_id) REFERENCES autores (id)
-    ON DELETE SET NULL
+    ON DELETE RESTRICT
     ON UPDATE CASCADE,
   CONSTRAINT fk_libros_editorial
     FOREIGN KEY (editorial_id) REFERENCES editoriales (id)
-    ON DELETE SET NULL
+    ON DELETE RESTRICT
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -341,7 +359,10 @@ SELECT
   l.anio_publicacion,
   l.idioma,
   l.paginas,
-  l.formato,
+  f.id AS formato_id,
+  f.codigo AS formato,
+  f.nombre AS formato_nombre,
+  f.requiere_stock,
   l.precio_venta,
   l.precio_alquiler,
   l.stock_fisico,
@@ -360,14 +381,16 @@ SELECT
   l.creado_en,
   l.actualizado_en
 FROM libros l
+INNER JOIN formatos f ON l.formato_id = f.id
 LEFT JOIN categorias c ON l.categoria_id = c.id
 LEFT JOIN autores a ON l.autor_id = a.id
 LEFT JOIN editoriales e ON l.editorial_id = e.id
 LEFT JOIN resenas r ON l.id = r.libro_id
 GROUP BY
   l.id, l.titulo, l.isbn, l.sinopsis, l.anio_publicacion,
-  l.idioma, l.paginas, l.formato, l.precio_venta, l.precio_alquiler,
-  l.stock_fisico, l.stock_minimo, l.portada_url, l.estado,
+  l.idioma, l.paginas, f.id, f.codigo, f.nombre, f.requiere_stock,
+  l.precio_venta, l.precio_alquiler, l.stock_fisico, l.stock_minimo,
+  l.portada_url, l.estado,
   c.id, c.nombre, c.slug,
   a.id, a.nombre,
   e.id, e.nombre,
@@ -397,8 +420,13 @@ INSERT IGNORE INTO editoriales (id, nombre, pais, sitio_web) VALUES
   ('44444444-4444-4444-8444-444444444403', 'Debate', 'Espana', 'https://www.penguinlibros.com'),
   ('44444444-4444-4444-8444-444444444404', 'Critica', 'Espana', 'https://www.planetadelibros.com');
 
+INSERT IGNORE INTO formatos (id, codigo, nombre, descripcion, requiere_stock) VALUES
+  ('55555555-5555-4555-8555-555555555501', 'FISICO', 'Fisico', 'Ejemplar impreso con control de inventario fisico', 1),
+  ('55555555-5555-4555-8555-555555555502', 'DIGITAL', 'Digital', 'Libro electronico de entrega inmediata sin stock fisico', 0),
+  ('55555555-5555-4555-8555-555555555503', 'AMBOS', 'Fisico y Digital', 'Disponible tanto en version impresa como digital', 1);
+
 INSERT IGNORE INTO libros (
-  id, titulo, isbn, sinopsis, anio_publicacion, idioma, paginas, formato,
+  id, titulo, isbn, sinopsis, anio_publicacion, idioma, paginas, formato_id,
   precio_venta, precio_alquiler, stock_fisico, stock_minimo,
   categoria_id, autor_id, editorial_id, estado
 ) VALUES
@@ -407,7 +435,7 @@ INSERT IGNORE INTO libros (
     'Cien anos de soledad',
     '978-0307474728',
     'Obra maestra del realismo magico que narra la historia de la familia Buendia en Macondo.',
-    1967, 'Espanol', 496, 'AMBOS',
+    1967, 'Espanol', 496, '55555555-5555-4555-8555-555555555503',
     58000.00, 12000.00, 15, 3,
     '11111111-1111-4111-8111-111111111101',
     '33333333-3333-4333-8333-333333333301',
@@ -419,7 +447,7 @@ INSERT IGNORE INTO libros (
     'Clean Code',
     '978-0132350884',
     'Manual practico para escribir codigo limpio, legible y mantenible en proyectos profesionales.',
-    2008, 'Ingles', 464, 'AMBOS',
+    2008, 'Ingles', 464, '55555555-5555-4555-8555-555555555503',
     135000.00, 25000.00, 10, 3,
     '11111111-1111-4111-8111-111111111102',
     '33333333-3333-4333-8333-333333333302',
@@ -431,7 +459,7 @@ INSERT IGNORE INTO libros (
     'Sapiens: De animales a dioses',
     '978-8499926223',
     'Recorrido historico por la evolucion humana desde la edad de piedra hasta el siglo XXI.',
-    2014, 'Espanol', 496, 'AMBOS',
+    2014, 'Espanol', 496, '55555555-5555-4555-8555-555555555503',
     72000.00, 15000.00, 12, 3,
     '11111111-1111-4111-8111-111111111103',
     '33333333-3333-4333-8333-333333333303',
@@ -443,7 +471,7 @@ INSERT IGNORE INTO libros (
     'Breve historia del tiempo',
     '978-0553380163',
     'Introduccion clara a la cosmologia, el origen del universo y los agujeros negros.',
-    1988, 'Espanol', 256, 'AMBOS',
+    1988, 'Espanol', 256, '55555555-5555-4555-8555-555555555503',
     64000.00, 14000.00, 8, 2,
     '11111111-1111-4111-8111-111111111104',
     '33333333-3333-4333-8333-333333333304',
@@ -455,7 +483,7 @@ INSERT IGNORE INTO libros (
     'El metodo Lean Startup',
     '978-8423409495',
     'Guia para crear productos y empresas mediante experimentacion y aprendizaje validado.',
-    2011, 'Espanol', 320, 'DIGITAL',
+    2011, 'Espanol', 320, '55555555-5555-4555-8555-555555555502',
     52000.00, 10000.00, 0, 0,
     '11111111-1111-4111-8111-111111111105',
     '33333333-3333-4333-8333-333333333305',

@@ -1,5 +1,6 @@
 const adminAlert = document.getElementById('adminAlert');
 let cachedUsers = [];
+let cachedMeta = { categorias: [], autores: [], editoriales: [], formatos: [] };
 
 function showAdminAlert(message, type = 'info') {
   adminAlert.innerHTML = `
@@ -19,13 +20,35 @@ function checkAdminSession() {
   return true;
 }
 
+function renderParamItem(type, item, subtitle = '') {
+  const count = Number(item.libros_asociados) || 0;
+  return `
+    <li class="list-group-item px-0 d-flex justify-content-between align-items-center gap-2">
+      <div>
+        <span class="fw-medium">${item.nombre}</span>
+        ${subtitle ? `<span class="text-muted"> ${subtitle}</span>` : ''}
+        <span class="badge bg-${count > 0 ? 'secondary' : 'light text-dark border'} ms-1">${count} libro(s)</span>
+      </div>
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-primary" onclick="openEditParam('${type}', '${item.id}')" title="Editar">
+          <i class="bi bi-pencil"></i>
+        </button>
+        <button class="btn btn-outline-danger" onclick="deleteParam('${type}', '${item.id}')" title="Eliminar">
+          <i class="bi bi-trash"></i>
+        </button>
+      </div>
+    </li>
+  `;
+}
+
 async function loadMetaSelects() {
   const res = await apiRequest('/books/meta');
-  const { categorias, autores, editoriales } = res.data;
+  cachedMeta = res.data;
+  const { categorias, autores, editoriales, formatos } = cachedMeta;
 
-  const fillSelect = (id, list) => {
+  const fillSelect = (id, list, includeEmpty = true) => {
     const el = document.getElementById(id);
-    el.innerHTML = '<option value="">Seleccionar...</option>';
+    el.innerHTML = includeEmpty ? '<option value="">Seleccionar...</option>' : '';
     list.forEach((item) => {
       const opt = document.createElement('option');
       opt.value = item.id;
@@ -37,18 +60,119 @@ async function loadMetaSelects() {
   fillSelect('bookCategoria', categorias);
   fillSelect('bookAutor', autores);
   fillSelect('bookEditorial', editoriales);
+  fillSelect('bookFormato', formatos, false);
 
   document.getElementById('categoriesList').innerHTML = categorias
-    .map((c) => `<li class="list-group-item px-0">${c.nombre}</li>`)
+    .map((c) => renderParamItem('categories', c))
     .join('');
 
   document.getElementById('authorsList').innerHTML = autores
-    .map((a) => `<li class="list-group-item px-0">${a.nombre} ${a.nacionalidad ? `<span class="text-muted">(${a.nacionalidad})</span>` : ''}</li>`)
+    .map((a) => renderParamItem('authors', a, a.nacionalidad ? `(${a.nacionalidad})` : ''))
     .join('');
 
   document.getElementById('publishersList').innerHTML = editoriales
-    .map((e) => `<li class="list-group-item px-0">${e.nombre} ${e.pais ? `<span class="text-muted">(${e.pais})</span>` : ''}</li>`)
+    .map((e) => renderParamItem('publishers', e, e.pais ? `(${e.pais})` : ''))
     .join('');
+
+  document.getElementById('formatsList').innerHTML = formatos
+    .map((f) => renderParamItem('formats', f, `[${f.codigo}]`))
+    .join('');
+}
+
+function openEditParam(type, id) {
+  const mapList = {
+    categories: cachedMeta.categorias,
+    authors: cachedMeta.autores,
+    publishers: cachedMeta.editoriales,
+    formats: cachedMeta.formatos
+  };
+  const item = (mapList[type] || []).find((x) => x.id === id);
+  if (!item) return;
+
+  if (Number(item.libros_asociados) > 0) {
+    showAdminAlert(
+      `No se puede modificar "${item.nombre}" porque tiene ${item.libros_asociados} libro(s) asociado(s).`,
+      'warning'
+    );
+    return;
+  }
+
+  document.getElementById('paramType').value = type;
+  document.getElementById('paramId').value = id;
+  document.getElementById('paramName').value = item.nombre;
+
+  const codeGroup = document.getElementById('paramCodeGroup');
+  const stockGroup = document.getElementById('paramStockGroup');
+  const extraLabel = document.getElementById('paramExtraLabel');
+  const extraInput = document.getElementById('paramExtra');
+
+  codeGroup.classList.add('d-none');
+  stockGroup.classList.add('d-none');
+
+  if (type === 'categories') {
+    document.getElementById('paramEditTitle').textContent = 'Editar Categoria';
+    extraLabel.textContent = 'Descripcion';
+    extraInput.value = item.descripcion || '';
+  } else if (type === 'authors') {
+    document.getElementById('paramEditTitle').textContent = 'Editar Autor';
+    extraLabel.textContent = 'Nacionalidad';
+    extraInput.value = item.nacionalidad || '';
+  } else if (type === 'publishers') {
+    document.getElementById('paramEditTitle').textContent = 'Editar Editorial';
+    extraLabel.textContent = 'Pais';
+    extraInput.value = item.pais || '';
+  } else if (type === 'formats') {
+    document.getElementById('paramEditTitle').textContent = 'Editar Formato';
+    codeGroup.classList.remove('d-none');
+    stockGroup.classList.remove('d-none');
+    document.getElementById('paramCode').value = item.codigo;
+    extraLabel.textContent = 'Descripcion';
+    extraInput.value = item.descripcion || '';
+    document.getElementById('paramStock').value = String(item.requiere_stock ? 1 : 0);
+  }
+
+  new bootstrap.Modal(document.getElementById('paramEditModal')).show();
+}
+
+document.getElementById('paramEditForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const type = document.getElementById('paramType').value;
+  const id = document.getElementById('paramId').value;
+  const nombre = document.getElementById('paramName').value;
+  const extra = document.getElementById('paramExtra').value;
+
+  let body = { nombre };
+  if (type === 'categories') body.descripcion = extra;
+  if (type === 'authors') body.nacionalidad = extra;
+  if (type === 'publishers') body.pais = extra;
+  if (type === 'formats') {
+    body = {
+      codigo: document.getElementById('paramCode').value,
+      nombre,
+      descripcion: extra,
+      requiere_stock: Number(document.getElementById('paramStock').value)
+    };
+  }
+
+  try {
+    await apiRequest(`/books/${type}/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    bootstrap.Modal.getInstance(document.getElementById('paramEditModal')).hide();
+    await loadMetaSelects();
+    showAdminAlert('Elemento actualizado correctamente.', 'success');
+  } catch (error) {
+    showAdminAlert(error.message, 'danger');
+  }
+});
+
+async function deleteParam(type, id) {
+  if (!confirm('Deseas eliminar este elemento de parametrizacion?')) return;
+  try {
+    await apiRequest(`/books/${type}/${id}`, { method: 'DELETE' });
+    await loadMetaSelects();
+    showAdminAlert('Elemento eliminado correctamente.', 'success');
+  } catch (error) {
+    showAdminAlert(error.message, 'warning');
+  }
 }
 
 async function loadAdminBooks() {
@@ -64,7 +188,7 @@ async function loadAdminBooks() {
       </td>
       <td class="fw-semibold">${b.titulo}</td>
       <td>${b.autor_nombre || '-'}</td>
-      <td><span class="badge bg-dark">${b.formato}</span></td>
+      <td><span class="badge bg-dark">${b.formato_nombre || b.formato}</span></td>
       <td>${formatCurrency(b.precio_venta)}</td>
       <td>${formatCurrency(b.precio_alquiler)}</td>
       <td>${b.stock_fisico}</td>
@@ -109,7 +233,7 @@ async function editBook(id) {
   document.getElementById('bookCategoria').value = b.categoria_id || '';
   document.getElementById('bookAutor').value = b.autor_id || '';
   document.getElementById('bookEditorial').value = b.editorial_id || '';
-  document.getElementById('bookFormato').value = b.formato;
+  document.getElementById('bookFormato').value = b.formato_id || '';
   document.getElementById('bookPrecioVenta').value = b.precio_venta;
   document.getElementById('bookPrecioAlquiler').value = b.precio_alquiler;
   document.getElementById('bookStock').value = b.stock_fisico;
@@ -139,7 +263,7 @@ document.getElementById('bookForm').addEventListener('submit', async (e) => {
     categoria_id: document.getElementById('bookCategoria').value || null,
     autor_id: document.getElementById('bookAutor').value || null,
     editorial_id: document.getElementById('bookEditorial').value || null,
-    formato: document.getElementById('bookFormato').value,
+    formato_id: document.getElementById('bookFormato').value,
     precio_venta: Number(document.getElementById('bookPrecioVenta').value),
     precio_alquiler: Number(document.getElementById('bookPrecioAlquiler').value),
     stock_fisico: Number(document.getElementById('bookStock').value),
@@ -157,6 +281,7 @@ document.getElementById('bookForm').addEventListener('submit', async (e) => {
     }
     bootstrap.Modal.getInstance(document.getElementById('bookModal')).hide();
     await loadAdminBooks();
+    await loadMetaSelects();
     await loadInventoryHistory();
   } catch (error) {
     showAdminAlert(error.message, 'danger');
@@ -212,6 +337,25 @@ document.getElementById('publisherForm').addEventListener('submit', async (e) =>
     e.target.reset();
     await loadMetaSelects();
     showAdminAlert('Editorial agregada correctamente.', 'success');
+  } catch (error) {
+    showAdminAlert(error.message, 'danger');
+  }
+});
+
+document.getElementById('formatForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await apiRequest('/books/formats', {
+      method: 'POST',
+      body: JSON.stringify({
+        codigo: document.getElementById('fmtCodigo').value,
+        nombre: document.getElementById('fmtNombre').value,
+        requiere_stock: Number(document.getElementById('fmtRequiereStock').value)
+      })
+    });
+    e.target.reset();
+    await loadMetaSelects();
+    showAdminAlert('Formato agregado correctamente.', 'success');
   } catch (error) {
     showAdminAlert(error.message, 'danger');
   }

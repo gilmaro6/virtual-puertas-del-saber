@@ -41,11 +41,20 @@ async function loadMetadata() {
   try {
     const res = await apiRequest('/books/meta');
     const categories = res.data.categorias || [];
+    const formats = res.data.formatos || [];
+
     categories.forEach((cat) => {
       const opt = document.createElement('option');
       opt.value = cat.id;
       opt.textContent = cat.nombre;
       categoryFilter.appendChild(opt);
+    });
+
+    formats.forEach((fmt) => {
+      const opt = document.createElement('option');
+      opt.value = fmt.id;
+      opt.textContent = fmt.nombre;
+      formatFilter.appendChild(opt);
     });
   } catch (error) {
     showAlert(error.message, 'warning');

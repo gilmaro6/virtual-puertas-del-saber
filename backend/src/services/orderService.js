@@ -21,9 +21,10 @@ async function createOrder(usuarioId, { metodo_pago = 'TARJETA', direccion_envio
 
     const [cartRows] = await connection.query(
       `SELECT ci.libro_id, ci.tipo_operacion, ci.cantidad,
-              l.titulo, l.formato, l.precio_venta, l.precio_alquiler, l.stock_fisico, l.estado
+              l.titulo, f.codigo AS formato, f.requiere_stock, l.precio_venta, l.precio_alquiler, l.stock_fisico, l.estado
        FROM carrito_items ci
        INNER JOIN libros l ON ci.libro_id = l.id
+       INNER JOIN formatos f ON l.formato_id = f.id
        WHERE ci.usuario_id = ?
        FOR UPDATE`,
       [usuarioId]
@@ -41,7 +42,7 @@ async function createOrder(usuarioId, { metodo_pago = 'TARJETA', direccion_envio
         throw new AppError(`El libro "${item.titulo}" ya no esta disponible`, 400);
       }
 
-      if (item.formato !== 'DIGITAL' && item.stock_fisico < item.cantidad) {
+      if (item.requiere_stock && item.stock_fisico < item.cantidad) {
         throw new AppError(`Stock insuficiente para "${item.titulo}". Disponible: ${item.stock_fisico}`, 400);
       }
 
@@ -81,7 +82,7 @@ async function createOrder(usuarioId, { metodo_pago = 'TARJETA', direccion_envio
         [uuidv4(), orderId, item.libro_id, item.tipo_operacion, item.cantidad, item.precio_unitario, item.subtotal]
       );
 
-      if (item.formato !== 'DIGITAL') {
+      if (item.requiere_stock) {
         const nuevoStock = item.stock_fisico - item.cantidad;
         const nuevoEstadoLibro = nuevoStock === 0 ? 'AGOTADO' : 'DISPONIBLE';
         await connection.query(
@@ -193,9 +194,10 @@ async function getOrderById(orderId, usuarioId, rol) {
   }
 
   const [items] = await pool.query(
-    `SELECT dp.*, l.titulo, l.isbn, l.formato
+    `SELECT dp.*, l.titulo, l.isbn, f.codigo AS formato
      FROM detalle_pedidos dp
      INNER JOIN libros l ON dp.libro_id = l.id
+     INNER JOIN formatos f ON l.formato_id = f.id
      WHERE dp.pedido_id = ?`,
     [orderId]
   );
@@ -287,9 +289,10 @@ async function updateOrderStatus(orderId, { estado, comentario = null }, adminId
 
 async function returnRental(rentalId, { observaciones = null }, adminId, ipOrigen) {
   const [rows] = await pool.query(
-    `SELECT pa.*, l.formato, l.stock_fisico
+    `SELECT pa.*, f.requiere_stock, l.stock_fisico
      FROM prestamos_alquileres pa
      INNER JOIN libros l ON pa.libro_id = l.id
+     INNER JOIN formatos f ON l.formato_id = f.id
      WHERE pa.id = ?`,
     [rentalId]
   );
@@ -312,7 +315,7 @@ async function returnRental(rentalId, { observaciones = null }, adminId, ipOrige
       [observaciones, rentalId]
     );
 
-    if (rental.formato !== 'DIGITAL') {
+    if (rental.requiere_stock) {
       const nuevoStock = rental.stock_fisico + 1;
       await connection.query(
         "UPDATE libros SET stock_fisico = ?, estado = 'DISPONIBLE' WHERE id = ?",

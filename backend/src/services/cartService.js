@@ -5,9 +5,11 @@ const AppError = require('../utils/appError');
 async function getCart(usuarioId) {
   const [rows] = await pool.query(
     `SELECT ci.id, ci.libro_id, ci.tipo_operacion, ci.cantidad, ci.agregado_en,
-            l.titulo, l.formato, l.precio_venta, l.precio_alquiler, l.stock_fisico, l.portada_url, l.estado
+            l.titulo, f.codigo AS formato, f.requiere_stock,
+            l.precio_venta, l.precio_alquiler, l.stock_fisico, l.portada_url, l.estado
      FROM carrito_items ci
      INNER JOIN libros l ON ci.libro_id = l.id
+     INNER JOIN formatos f ON l.formato_id = f.id
      WHERE ci.usuario_id = ?
      ORDER BY ci.agregado_en DESC`,
     [usuarioId]
@@ -39,7 +41,10 @@ async function addItem(usuarioId, { libro_id, tipo_operacion = 'COMPRA', cantida
   }
 
   const [books] = await pool.query(
-    'SELECT id, titulo, formato, stock_fisico, estado FROM libros WHERE id = ?',
+    `SELECT l.id, l.titulo, f.codigo AS formato, f.requiere_stock, l.stock_fisico, l.estado
+     FROM libros l
+     INNER JOIN formatos f ON l.formato_id = f.id
+     WHERE l.id = ?`,
     [libro_id]
   );
 
@@ -59,7 +64,7 @@ async function addItem(usuarioId, { libro_id, tipo_operacion = 'COMPRA', cantida
 
   const totalQty = existing.length > 0 ? existing[0].cantidad + qty : qty;
 
-  if (book.formato === 'FISICO' && totalQty > book.stock_fisico) {
+  if (book.requiere_stock && totalQty > book.stock_fisico) {
     throw new AppError(`Stock insuficiente para ${book.titulo}. Disponible: ${book.stock_fisico}`, 400);
   }
 
@@ -82,9 +87,10 @@ async function updateItem(usuarioId, itemId, { cantidad }) {
   }
 
   const [rows] = await pool.query(
-    `SELECT ci.id, ci.libro_id, l.formato, l.stock_fisico, l.titulo
+    `SELECT ci.id, ci.libro_id, f.requiere_stock, l.stock_fisico, l.titulo
      FROM carrito_items ci
      INNER JOIN libros l ON ci.libro_id = l.id
+     INNER JOIN formatos f ON l.formato_id = f.id
      WHERE ci.id = ? AND ci.usuario_id = ?`,
     [itemId, usuarioId]
   );
@@ -94,7 +100,7 @@ async function updateItem(usuarioId, itemId, { cantidad }) {
   }
 
   const item = rows[0];
-  if (item.formato === 'FISICO' && qty > item.stock_fisico) {
+  if (item.requiere_stock && qty > item.stock_fisico) {
     throw new AppError(`Stock insuficiente para ${item.titulo}. Disponible: ${item.stock_fisico}`, 400);
   }
 
