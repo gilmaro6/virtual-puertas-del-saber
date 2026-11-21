@@ -1,36 +1,56 @@
 :root {
-  --pds-primary: #14284b;
-  --pds-secondary: #1e3f6e;
-  --pds-wine: #6b1d2f;
-  --pds-gold: #c6922c;
-  --pds-gold-hover: #b07f20;
-  --pds-bg: #f4f1ea;
-  --pds-surface: #ffffff;
-  --pds-border: #e2dcd0;
-  --pds-text: #22262e;
-  --pds-muted: #5c6470;
+  --pds-primary: #142D4E;
+  --pds-secondary: #2878D0;
+  --pds-accent: #F4B942;
+  --pds-accent-hover: #dfa42c;
+  --pds-bg: #F4F7FB;
+  --pds-surface: #FFFFFF;
+  --pds-text: #253449;
+  --pds-border: #dce4f0;
+  --pds-muted: #5a6a80;
 }
 
 body {
   background-color: var(--pds-bg);
   color: var(--pds-text);
   font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1 0 auto;
 }
 
 h1, h2, h3, h4, .navbar-brand, .book-title, .modal-title {
   font-family: 'Merriweather', Georgia, serif;
 }
 
+a {
+  color: var(--pds-secondary);
+}
+
+a:hover {
+  color: var(--pds-primary);
+}
+
 .navbar-pds {
-  background: linear-gradient(90deg, #10203d 0%, var(--pds-primary) 60%, #1d355e 100%);
-  border-bottom: 3px solid var(--pds-gold);
+  background-color: var(--pds-primary);
+  border-bottom: 3px solid var(--pds-accent);
+}
+
+.footer-pds {
+  background-color: var(--pds-primary);
+  color: var(--pds-surface);
+  border-top: 3px solid var(--pds-accent);
 }
 
 .hero-pds {
-  background: linear-gradient(135deg, var(--pds-primary) 0%, #243b61 65%, var(--pds-wine) 100%);
-  color: #ffffff;
+  background: linear-gradient(135deg, var(--pds-primary) 0%, #1c4476 60%, var(--pds-secondary) 100%);
+  color: var(--pds-surface);
   border-radius: 0.85rem;
-  border-left: 5px solid var(--pds-gold);
+  border-left: 5px solid var(--pds-accent);
 }
 
 .card-pds {
@@ -49,13 +69,13 @@ h1, h2, h3, h4, .navbar-brand, .book-title, .modal-title {
 
 .book-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 0.75rem 1.5rem rgba(20, 40, 75, 0.14);
+  box-shadow: 0 0.75rem 1.5rem rgba(20, 45, 78, 0.14);
 }
 
 .book-cover-wrapper {
   position: relative;
   height: 220px;
-  background: linear-gradient(160deg, #eae4d8 0%, #dcd4c4 100%);
+  background: linear-gradient(160deg, #e9eff7 0%, #dce6f4 100%);
   border-bottom: 1px solid var(--pds-border);
   overflow: hidden;
 }
@@ -84,7 +104,7 @@ h1, h2, h3, h4, .navbar-brand, .book-title, .modal-title {
   right: 0.65rem;
   font-size: 0.7rem;
   letter-spacing: 0.04em;
-  background-color: rgba(20, 40, 75, 0.9);
+  background-color: var(--pds-primary);
 }
 
 .book-thumb {
@@ -96,34 +116,45 @@ h1, h2, h3, h4, .navbar-brand, .book-title, .modal-title {
 }
 
 .price-tag {
-  color: var(--pds-wine);
+  color: var(--pds-primary);
   font-weight: 700;
 }
 
 .btn-pds {
   background-color: var(--pds-primary);
   border-color: var(--pds-primary);
-  color: #ffffff;
+  color: var(--pds-surface);
   font-weight: 500;
 }
 
 .btn-pds:hover {
   background-color: var(--pds-secondary);
   border-color: var(--pds-secondary);
-  color: #ffffff;
+  color: var(--pds-surface);
 }
 
 .btn-gold {
-  background-color: var(--pds-gold);
-  border-color: var(--pds-gold);
-  color: #14284b;
+  background-color: var(--pds-accent);
+  border-color: var(--pds-accent);
+  color: var(--pds-primary);
   font-weight: 600;
 }
 
 .btn-gold:hover {
-  background-color: var(--pds-gold-hover);
-  border-color: var(--pds-gold-hover);
-  color: #ffffff;
+  background-color: var(--pds-accent-hover);
+  border-color: var(--pds-accent-hover);
+  color: var(--pds-primary);
+}
+
+.btn-outline-primary {
+  color: var(--pds-secondary);
+  border-color: var(--pds-secondary);
+}
+
+.btn-outline-primary:hover {
+  background-color: var(--pds-secondary);
+  border-color: var(--pds-secondary);
+  color: var(--pds-surface);
 }
 
 .nav-tabs-pds .nav-link {
@@ -133,12 +164,12 @@ h1, h2, h3, h4, .navbar-brand, .book-title, .modal-title {
 
 .nav-tabs-pds .nav-link.active {
   background-color: var(--pds-primary);
-  color: #ffffff;
+  color: var(--pds-surface);
   border-color: var(--pds-primary);
 }
 
 .table thead th {
-  background-color: #ebe6dc;
+  background-color: #e9eff7;
   color: var(--pds-primary);
   font-weight: 600;
   border-bottom: 2px solid var(--pds-border);
