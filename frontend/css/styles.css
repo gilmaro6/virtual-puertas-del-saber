@@ -73,7 +73,8 @@ a:hover {
 
 .nav-search-form {
   width: 100%;
-  max-width: 420px;
+  flex: 1 1 320px;
+  max-width: 540px;
 }
 
 .navbar-pds {
