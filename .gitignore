@@ -13,6 +13,7 @@ pnpm-debug.log*
 
 # Persistencia local de base de datos Docker
 mysql_data/
+backend/database/backup_*.sql
 
 # Archivos del Sistema Operativo
 .DS_Store

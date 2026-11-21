@@ -423,24 +423,30 @@ GROUP BY
 -- ==========================================================
 
 INSERT IGNORE INTO categorias (id, nombre, slug, descripcion) VALUES
+  ('0cef715a-eaed-4037-8207-6daf7d281432', 'Musica', 'musica', 'Libros de contenido musical y artistas'),
   ('11111111-1111-4111-8111-111111111101', 'Literatura', 'literatura', 'Novelas, cuentos y obras clasicas de la literatura universal'),
   ('11111111-1111-4111-8111-111111111102', 'Tecnologia', 'tecnologia', 'Programacion, arquitectura de software e ingenieria'),
   ('11111111-1111-4111-8111-111111111103', 'Historia', 'historia', 'Ensayos historicos, biografias y cronicas'),
   ('11111111-1111-4111-8111-111111111104', 'Ciencia', 'ciencia', 'Divulgacion cientifica, fisica, matematicas y biologia'),
-  ('11111111-1111-4111-8111-111111111105', 'Negocios', 'negocios', 'Emprendimiento, gestion de proyectos y economia');
+  ('11111111-1111-4111-8111-111111111105', 'Negocios', 'negocios', 'Emprendimiento, gestion de proyectos y economia'),
+  ('6a171570-2756-4d40-8145-c2fa6d8eeab8', 'Novela', 'novela', ''),
+  ('ae438f6e-adc4-4eab-b95f-9e64c2fd0fbc', 'Religion', 'religion', 'Libros de contenido espiritual y religioso');
 
 INSERT IGNORE INTO autores (id, nombre, nacionalidad, biografia) VALUES
   ('33333333-3333-4333-8333-333333333301', 'Gabriel Garcia Marquez', 'Colombiana', 'Escritor y periodista colombiano, Premio Nobel de Literatura 1982.'),
   ('33333333-3333-4333-8333-333333333302', 'Robert C. Martin', 'Estadounidense', 'Ingeniero de software y autor referente en desarrollo agil y codigo limpio.'),
   ('33333333-3333-4333-8333-333333333303', 'Yuval Noah Harari', 'Israeli', 'Historiador y escritor especializado en historia de la humanidad.'),
   ('33333333-3333-4333-8333-333333333304', 'Stephen Hawking', 'Britanica', 'Fisico teorico y divulgador cientifico.'),
-  ('33333333-3333-4333-8333-333333333305', 'Eric Ries', 'Estadounidense', 'Emprendedor y autor de la metodologia Lean Startup.');
+  ('33333333-3333-4333-8333-333333333305', 'Eric Ries', 'Estadounidense', 'Emprendedor y autor de la metodologia Lean Startup.'),
+  ('38545906-6d64-489a-807a-dd34648ee81d', 'Fiódor Dostoyevski', 'Ruso', NULL),
+  ('c0ffbf6f-2573-42c4-8462-1a63626bba4f', 'Maria Luisa Piraquive', 'Colombiana', NULL);
 
 INSERT IGNORE INTO editoriales (id, nombre, pais, sitio_web) VALUES
   ('44444444-4444-4444-8444-444444444401', 'Penguin Random House', 'Espana', 'https://www.penguinrandomhouse.com'),
   ('44444444-4444-4444-8444-444444444402', 'Prentice Hall', 'Estados Unidos', 'https://www.pearson.com'),
   ('44444444-4444-4444-8444-444444444403', 'Debate', 'Espana', 'https://www.penguinlibros.com'),
-  ('44444444-4444-4444-8444-444444444404', 'Critica', 'Espana', 'https://www.planetadelibros.com');
+  ('44444444-4444-4444-8444-444444444404', 'Critica', 'Espana', 'https://www.planetadelibros.com'),
+  ('4a5c2f6c-1233-4ea8-ba05-385da5bee856', 'Papeleria Futuro', 'Colombia', NULL);
 
 INSERT IGNORE INTO formatos (id, codigo, nombre, descripcion, requiere_stock) VALUES
   ('55555555-5555-4555-8555-555555555501', 'FISICO', 'Fisico', 'Ejemplar impreso con control de inventario fisico', 1),
@@ -449,7 +455,7 @@ INSERT IGNORE INTO formatos (id, codigo, nombre, descripcion, requiere_stock) VA
 
 INSERT IGNORE INTO libros (
   id, titulo, isbn, sinopsis, anio_publicacion, idioma, paginas, formato_id,
-  precio_venta, precio_alquiler, stock_fisico, stock_minimo,
+  precio_venta, precio_alquiler, stock_fisico, stock_minimo, portada_url,
   categoria_id, autor_id, editorial_id, estado
 ) VALUES
   (
@@ -459,33 +465,10 @@ INSERT IGNORE INTO libros (
     'Obra maestra del realismo magico que narra la historia de la familia Buendia en Macondo.',
     1967, 'Espanol', 496, '55555555-5555-4555-8555-555555555503',
     58000.00, 12000.00, 15, 3,
+    'https://m.media-amazon.com/images/I/91S1vKWiZWL._SL1500_.jpg',
     '11111111-1111-4111-8111-111111111101',
     '33333333-3333-4333-8333-333333333301',
     '44444444-4444-4444-8444-444444444401',
-    'DISPONIBLE'
-  ),
-  (
-    '22222222-2222-4222-8222-222222222202',
-    'Clean Code',
-    '978-0132350884',
-    'Manual practico para escribir codigo limpio, legible y mantenible en proyectos profesionales.',
-    2008, 'Ingles', 464, '55555555-5555-4555-8555-555555555503',
-    135000.00, 25000.00, 10, 3,
-    '11111111-1111-4111-8111-111111111102',
-    '33333333-3333-4333-8333-333333333302',
-    '44444444-4444-4444-8444-444444444402',
-    'DISPONIBLE'
-  ),
-  (
-    '22222222-2222-4222-8222-222222222203',
-    'Sapiens: De animales a dioses',
-    '978-8499926223',
-    'Recorrido historico por la evolucion humana desde la edad de piedra hasta el siglo XXI.',
-    2014, 'Espanol', 496, '55555555-5555-4555-8555-555555555503',
-    72000.00, 15000.00, 12, 3,
-    '11111111-1111-4111-8111-111111111103',
-    '33333333-3333-4333-8333-333333333303',
-    '44444444-4444-4444-8444-444444444403',
     'DISPONIBLE'
   ),
   (
@@ -494,7 +477,8 @@ INSERT IGNORE INTO libros (
     '978-0553380163',
     'Introduccion clara a la cosmologia, el origen del universo y los agujeros negros.',
     1988, 'Espanol', 256, '55555555-5555-4555-8555-555555555503',
-    64000.00, 14000.00, 8, 2,
+    64000.00, 14000.00, 7, 2,
+    'https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1539358813i/42286901.jpg',
     '11111111-1111-4111-8111-111111111104',
     '33333333-3333-4333-8333-333333333304',
     '44444444-4444-4444-8444-444444444404',
@@ -507,8 +491,35 @@ INSERT IGNORE INTO libros (
     'Guia para crear productos y empresas mediante experimentacion y aprendizaje validado.',
     2011, 'Espanol', 320, '55555555-5555-4555-8555-555555555502',
     52000.00, 10000.00, 0, 0,
+    'https://m.media-amazon.com/images/I/71lpDUnEbQL._SL1500_.jpg',
     '11111111-1111-4111-8111-111111111105',
     '33333333-3333-4333-8333-333333333305',
     '44444444-4444-4444-8444-444444444401',
+    'DISPONIBLE'
+  ),
+  (
+    '9f226434-0440-46b0-9fe4-b9452547e4e7',
+    'Vivencias',
+    '856217-RG',
+    'Vivencias, la publicación de la Hermana María Luisa Piraquive en la cual relata desde una perspectiva histórica los inicios de la Iglesia de Dios Ministerial de Jesucristo Internacional, y comparte pasajes de su vida personal y familiar, ahora se encuentra disponible en formato digital para dispositivos Android, iOS, Mac y PC, por medio de la aplicación Kindle.',
+    NULL, 'Espanol', NULL, '55555555-5555-4555-8555-555555555502',
+    50000.00, 25000.00, 5, 3,
+    'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTaxT-MmXXYS6mkyiAQvWfqVffyijLXTp0z1YxtKkv4OI08lV7wsFUZAwbh&s=10',
+    'ae438f6e-adc4-4eab-b95f-9e64c2fd0fbc',
+    'c0ffbf6f-2573-42c4-8462-1a63626bba4f',
+    '4a5c2f6c-1233-4ea8-ba05-385da5bee856',
+    'DISPONIBLE'
+  ),
+  (
+    'f7dfb9ca-378c-4edd-afff-31e9e8042ea2',
+    'Crimen y castigo',
+    '12547-PS',
+    '“Crimen y castigo” es una novela psicológica de Fiódor Dostoyevski publicada en 1866, centrada en Rodión Raskólnikov, un estudiante que asesina a una usurera y enfrenta un profundo conflicto moral que lo conduce finalmente a confesar y ser condenado a Siberia.',
+    NULL, 'Espanol', NULL, '55555555-5555-4555-8555-555555555501',
+    150000.00, 75000.00, 4, 3,
+    'https://assets-global.website-files.com/6034d7d1f3e0f52c50b2adee/6254541d8ae4df16d4e69bc8_6034d7d1f3e0f54529b2b1a1_Crimen-y-castigo-fiodor-dostoyevski-editorial-alma.jpeg',
+    '6a171570-2756-4d40-8145-c2fa6d8eeab8',
+    '38545906-6d64-489a-807a-dd34648ee81d',
+    '44444444-4444-4444-8444-444444444402',
     'DISPONIBLE'
   );
