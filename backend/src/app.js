@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -16,7 +18,7 @@ const userRoutes = require('./routes/userRoutes');
 const app = express();
 
 // Seguridad de cabeceras y CORS
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN || '*',
@@ -59,6 +61,12 @@ app.use('/api/books', bookRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/users', userRoutes);
+
+// Servir frontend estatico cuando esta disponible
+const frontendPath = path.resolve(__dirname, '../../frontend');
+if (fs.existsSync(frontendPath)) {
+  app.use(express.static(frontendPath));
+}
 
 // Manejo de rutas no encontradas y errores centralizados
 app.use(notFoundHandler);

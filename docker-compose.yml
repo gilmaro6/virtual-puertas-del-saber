@@ -49,6 +49,7 @@ services:
     volumes:
       - ./backend:/usr/src/app
       - /usr/src/app/node_modules
+      - ./frontend:/usr/src/frontend:ro
     networks:
       - virtual_puertas_del_saber_network
 

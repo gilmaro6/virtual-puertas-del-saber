@@ -1,0 +1,14 @@
+{
+  "name": "Danzara - Virtual Puertas del Saber",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "Libreria Virtual Danzara",
+      "onAutoForward": "openBrowser"
+    }
+  },
+  "postCreateCommand": "cp -n .env.example .env || true"
+}
