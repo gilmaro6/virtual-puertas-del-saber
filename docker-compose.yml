@@ -1,0 +1,61 @@
+name: virtual_puertas_del_saber
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: VIRTUAL_PUERTAS_DEL_SABER_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-puertas_del_saber_db}
+      MYSQL_USER: ${DB_USER:-puertas_del_saber_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-puertas_del_saber_pass}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_master_pass}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/database:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-root_master_pass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - virtual_puertas_del_saber_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: VIRTUAL_PUERTAS_DEL_SABER_backend
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${PORT:-3000}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-puertas_del_saber_db}
+      DB_USER: ${DB_USER:-puertas_del_saber_user}
+      DB_PASSWORD: ${DB_PASSWORD:-puertas_del_saber_pass}
+      JWT_SECRET: ${JWT_SECRET:-tu_clave_secreta_super_segura_aqui}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - virtual_puertas_del_saber_network
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  virtual_puertas_del_saber_network:
+    driver: bridge
