@@ -373,13 +373,11 @@ document.getElementById('checkoutForm').addEventListener('submit', async (e) => 
     bootstrap.Offcanvas.getInstance(document.getElementById('cartOffcanvas')).hide();
     await loadCart();
     await loadBooks();
-    showAlert(
-      `Pedido <strong>${res.data.numero_orden}</strong> confirmado por ${formatCurrency(res.data.total)}.
-       <a href="factura.html?orderId=${res.data.id}" target="_blank" class="alert-link ms-2">
-         <i class="bi bi-printer"></i> Ver e imprimir factura
-       </a>`,
-      'success'
-    );
+
+    document.getElementById('orderSuccessMessage').innerHTML =
+      `Tu pedido <strong>${res.data.numero_orden}</strong> fue registrado por <strong>${formatCurrency(res.data.total)}</strong>.`;
+    document.getElementById('orderSuccessInvoiceLink').href = `factura.html?orderId=${res.data.id}`;
+    new bootstrap.Modal(document.getElementById('orderSuccessModal')).show();
   } catch (error) {
     showAlert(error.message, 'danger');
   }
