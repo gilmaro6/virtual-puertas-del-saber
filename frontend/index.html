@@ -22,8 +22,8 @@
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="mainNav">
-        <form class="d-flex mx-auto my-2 my-lg-0 w-50" id="searchForm">
-          <div class="input-group">
+        <form class="d-flex mx-auto my-2 my-lg-0 nav-search-form" id="searchForm">
+          <div class="input-group input-group-sm">
             <input type="search" class="form-control" id="searchInput" placeholder="Buscar por titulo, autor o ISBN...">
             <button class="btn btn-warning" type="submit"><i class="bi bi-search"></i></button>
           </div>
@@ -56,39 +56,39 @@
     </div>
   </nav>
 
-  <main class="container my-4">
-    <section class="hero-pds p-4 p-md-5 mb-4 shadow-sm">
+  <main class="container my-3">
+    <section class="hero-pds p-3 p-md-4 mb-3 shadow-sm">
       <div class="row align-items-center g-3">
-        <div class="col-lg-9">
-          <h1 class="display-6 fw-bold mb-2">
+        <div class="col-9 col-md-10">
+          <h1 class="h2 fw-bold mb-1">
             Libreria Virtual <span style="color: var(--pds-accent);">Danzara</span>
           </h1>
-          <p class="lead mb-0 opacity-75">Explora nuestro catalogo para compra o alquiler de libros fisicos y digitales.</p>
+          <p class="mb-0 opacity-75">Explora nuestro catalogo para compra o alquiler de libros fisicos y digitales.</p>
         </div>
-        <div class="col-lg-3 text-center text-lg-end">
+        <div class="col-3 col-md-2 text-end">
           <img src="assets/images/logo-danzara.jpg" alt="Emblema cultural Danzara" class="hero-emblem">
         </div>
       </div>
     </section>
 
-    <section class="card border-0 shadow-sm mb-4">
-      <div class="card-body">
-        <div class="row g-3 align-items-end">
-          <div class="col-md-4">
-            <label for="categoryFilter" class="form-label fw-semibold">Categoria</label>
-            <select id="categoryFilter" class="form-select">
+    <section class="card card-pds shadow-sm mb-3">
+      <div class="card-body py-2 px-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-6 col-md-4">
+            <label for="categoryFilter" class="form-label small fw-semibold mb-1">Categoria</label>
+            <select id="categoryFilter" class="form-select form-select-sm">
               <option value="">Todas las categorias</option>
             </select>
           </div>
-          <div class="col-md-4">
-            <label for="formatFilter" class="form-label fw-semibold">Formato</label>
-            <select id="formatFilter" class="form-select">
+          <div class="col-sm-6 col-md-4">
+            <label for="formatFilter" class="form-label small fw-semibold mb-1">Formato</label>
+            <select id="formatFilter" class="form-select form-select-sm">
               <option value="">Todos los formatos</option>
             </select>
           </div>
           <div class="col-md-4 d-flex gap-2">
-            <button class="btn btn-pds w-100" id="applyFiltersBtn">Filtrar</button>
-            <button class="btn btn-outline-secondary" id="clearFiltersBtn">Limpiar</button>
+            <button class="btn btn-pds btn-sm w-100" id="applyFiltersBtn">Filtrar</button>
+            <button class="btn btn-outline-secondary btn-sm" id="clearFiltersBtn">Limpiar</button>
           </div>
         </div>
       </div>
@@ -98,10 +98,10 @@
 
     <section>
       <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="h4 mb-0 fw-bold">Catalogo de Libros</h2>
+        <h2 class="h5 mb-0 fw-bold">Catalogo de Libros</h2>
         <span class="text-muted small" id="resultsCount">Cargando...</span>
       </div>
-      <div class="row g-4" id="booksGrid"></div>
+      <div class="row g-3" id="booksGrid"></div>
     </section>
   </main>
 

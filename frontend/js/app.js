@@ -78,7 +78,7 @@ async function loadBooks() {
     }
 
     booksGrid.innerHTML = items.map((book) => `
-      <div class="col-sm-6 col-lg-4">
+      <div class="col-12 col-sm-6 col-md-4 col-xl-3">
         <div class="card h-100 book-card">
           <div class="book-cover-wrapper">
             ${book.portada_url
@@ -87,20 +87,20 @@ async function loadBooks() {
             }
             <span class="badge badge-formato">${book.formato}</span>
           </div>
-          <div class="card-body d-flex flex-column">
+          <div class="card-body p-3 d-flex flex-column">
             <div class="d-flex justify-content-between align-items-start mb-1">
               <span class="badge bg-secondary-subtle text-dark">${book.categoria_nombre || 'General'}</span>
               <span class="small text-warning fw-semibold"><i class="bi bi-star-fill"></i> ${book.calificacion_promedio}</span>
             </div>
-            <h5 class="card-title book-title fw-bold mb-1">${book.titulo}</h5>
-            <p class="text-muted small mb-2">${book.autor_nombre || 'Autor por definir'}</p>
-            <p class="card-text small text-secondary flex-grow-1">${book.sinopsis ? book.sinopsis.slice(0, 95) + '...' : ''}</p>
-            <div class="border-top pt-2 mt-2">
+            <h6 class="card-title book-title fw-bold mb-1">${book.titulo}</h6>
+            <p class="text-muted small mb-1">${book.autor_nombre || 'Autor por definir'}</p>
+            <p class="card-text small text-secondary flex-grow-1 mb-2">${book.sinopsis ? book.sinopsis.slice(0, 75) + '...' : ''}</p>
+            <div class="border-top pt-2 mt-auto">
               <div class="d-flex justify-content-between small mb-2">
                 <span>Compra: <strong class="price-tag">${formatCurrency(book.precio_venta)}</strong></span>
                 <span>Alquiler: <strong>${formatCurrency(book.precio_alquiler)}</strong></span>
               </div>
-              <div class="d-flex gap-2">
+              <div class="d-flex gap-1">
                 <button class="btn btn-pds btn-sm flex-grow-1" onclick="addToCart('${book.id}', 'COMPRA')">
                   <i class="bi bi-bag-plus"></i> Comprar
                 </button>
