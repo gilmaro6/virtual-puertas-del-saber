@@ -18,6 +18,15 @@ async function getBookById(req, res, next) {
   }
 }
 
+async function getBookForEditor(req, res, next) {
+  try {
+    const book = await bookService.getBookForEditor(req.params.id);
+    res.status(200).json({ status: 'ok', data: book });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function getCatalogMetadata(req, res, next) {
   try {
     const meta = await bookService.getCatalogMetadata();
@@ -174,6 +183,7 @@ async function deleteFormat(req, res, next) {
 module.exports = {
   listBooks,
   getBookById,
+  getBookForEditor,
   getCatalogMetadata,
   createBook,
   updateBook,

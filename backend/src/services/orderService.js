@@ -10,7 +10,71 @@ function generateOrderNumber() {
   return `PDS-${datePart}-${randomPart}`;
 }
 
-async function createOrder(usuarioId, { metodo_pago = 'TARJETA', direccion_envio = null, ciudad = null, notas = null }, ipOrigen) {
+function validatePaymentDetails(metodoPago, paymentData = {}) {
+  if (metodoPago === 'TARJETA') {
+    const rawNum = String(paymentData.numero_tarjeta || '').replace(/\s+/g, '');
+    if (!/^\d{13,19}$/.test(rawNum)) {
+      throw new AppError('Numero de tarjeta invalido (debe tener entre 13 y 19 digitos)', 400);
+    }
+    if (!paymentData.titular || !paymentData.titular.trim()) {
+      throw new AppError('El nombre del titular de la tarjeta es obligatorio', 400);
+    }
+    if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(String(paymentData.expiracion || '').trim())) {
+      throw new AppError('Fecha de expiracion invalida (usa formato MM/AA)', 400);
+    }
+    if (!/^\d{3,4}$/.test(String(paymentData.cvv || '').trim())) {
+      throw new AppError('Codigo CVV invalido (3 o 4 digitos)', 400);
+    }
+
+    const franquicia = rawNum.startsWith('4')
+      ? 'VISA'
+      : rawNum.startsWith('5')
+        ? 'MASTERCARD'
+        : 'OTRA';
+
+    return {
+      franquicia,
+      ultimos_4: rawNum.slice(-4),
+      titular: paymentData.titular.trim().toUpperCase(),
+      cuotas: Math.min(Math.max(Number(paymentData.cuotas) || 1, 1), 36)
+    };
+  }
+
+  if (metodoPago === 'PSE') {
+    if (!paymentData.banco || !paymentData.tipo_persona || !paymentData.numero_documento || !paymentData.email_pse) {
+      throw new AppError('Completa todos los campos requeridos para el pago por PSE', 400);
+    }
+    return {
+      banco: paymentData.banco,
+      tipo_persona: paymentData.tipo_persona,
+      tipo_documento: paymentData.tipo_documento || 'CC',
+      numero_documento: String(paymentData.numero_documento).trim(),
+      email_pse: String(paymentData.email_pse).trim().toLowerCase(),
+      cus_simulado: `CUS-${Math.floor(10000000 + Math.random() * 90000000)}`
+    };
+  }
+
+  if (metodoPago === 'TRANSFERENCIA') {
+    if (!paymentData.banco_origen || !paymentData.numero_comprobante) {
+      throw new AppError('Ingresa el banco de origen y el numero de comprobante', 400);
+    }
+    return {
+      banco_origen: paymentData.banco_origen.trim(),
+      numero_comprobante: paymentData.numero_comprobante.trim()
+    };
+  }
+
+  return { modalidad: 'Pago contraentrega en domicilio' };
+}
+
+async function createOrder(usuarioId, { metodo_pago = 'TARJETA', direccion_envio = null, ciudad = null, notas = null, datos_pago = {} }, ipOrigen) {
+  const validMethods = ['TARJETA', 'PSE', 'TRANSFERENCIA', 'EFECTIVO'];
+  if (!validMethods.includes(metodo_pago)) {
+    throw new AppError('Metodo de pago no soportado', 400);
+  }
+
+  const sanitizedPayment = validatePaymentDetails(metodo_pago, datos_pago);
+
   const connection = await pool.getConnection();
   let orderId;
   let numeroOrden;
@@ -21,7 +85,7 @@ async function createOrder(usuarioId, { metodo_pago = 'TARJETA', direccion_envio
 
     const [cartRows] = await connection.query(
       `SELECT ci.libro_id, ci.tipo_operacion, ci.cantidad,
-              l.titulo, f.codigo AS formato, f.requiere_stock, l.precio_venta, l.precio_alquiler, l.stock_fisico, l.estado
+              l.titulo, f.codigo AS formato, f.requiere_stock, l.precio_venta, l.precio_alquiler, l.stock_fisico, l.dias_alquiler, l.estado
        FROM carrito_items ci
        INNER JOIN libros l ON ci.libro_id = l.id
        INNER JOIN formatos f ON l.formato_id = f.id
@@ -107,8 +171,9 @@ async function createOrder(usuarioId, { metodo_pago = 'TARJETA', direccion_envio
       }
 
       if (item.tipo_operacion === 'ALQUILER') {
+        const dias = Math.max(Number(item.dias_alquiler) || 15, 1);
         const vencimiento = new Date();
-        vencimiento.setDate(vencimiento.getDate() + 15);
+        vencimiento.setDate(vencimiento.getDate() + dias);
         await connection.query(
           `INSERT INTO prestamos_alquileres (id, usuario_id, libro_id, pedido_id, fecha_vencimiento, estado)
            VALUES (?, ?, ?, ?, ?, 'ACTIVO')`,
@@ -118,9 +183,17 @@ async function createOrder(usuarioId, { metodo_pago = 'TARJETA', direccion_envio
     }
 
     await connection.query(
-      `INSERT INTO pagos (id, pedido_id, metodo_pago, referencia_transaccion, monto, estado)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [uuidv4(), orderId, metodo_pago, `TX-${Date.now()}-${Math.floor(Math.random() * 1000)}`, total, estadoPago]
+      `INSERT INTO pagos (id, pedido_id, metodo_pago, referencia_transaccion, monto, estado, detalle_pago)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        uuidv4(),
+        orderId,
+        metodo_pago,
+        `TX-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        total,
+        estadoPago,
+        JSON.stringify(sanitizedPayment)
+      ]
     );
 
     await connection.query(
@@ -459,10 +532,126 @@ async function getOrderInvoice(orderId, usuarioId, rol) {
   };
 }
 
+async function getMyLibrary(usuarioId) {
+  const [purchased] = await pool.query(
+    `SELECT DISTINCT l.id AS libro_id, l.titulo, l.portada_url, a.nombre AS autor_nombre,
+            'COMPRA' AS tipo_acceso, NULL AS fecha_vencimiento, 'ACTIVO' AS estado_acceso,
+            (l.contenido_digital IS NOT NULL AND CHAR_LENGTH(l.contenido_digital) > 0) AS tiene_contenido_digital
+     FROM detalle_pedidos dp
+     INNER JOIN pedidos p ON dp.pedido_id = p.id
+     INNER JOIN libros l ON dp.libro_id = l.id
+     LEFT JOIN autores a ON l.autor_id = a.id
+     WHERE p.usuario_id = ? AND dp.tipo_operacion = 'COMPRA' AND p.estado != 'CANCELADO'`,
+    [usuarioId]
+  );
+
+  const [rented] = await pool.query(
+    `SELECT pa.libro_id, l.titulo, l.portada_url, a.nombre AS autor_nombre,
+            'ALQUILER' AS tipo_acceso, pa.fecha_vencimiento,
+            CASE WHEN pa.fecha_vencimiento >= NOW() AND pa.estado = 'ACTIVO' THEN 'ACTIVO' ELSE 'VENCIDO' END AS estado_acceso,
+            (l.contenido_digital IS NOT NULL AND CHAR_LENGTH(l.contenido_digital) > 0) AS tiene_contenido_digital
+     FROM prestamos_alquileres pa
+     INNER JOIN libros l ON pa.libro_id = l.id
+     LEFT JOIN autores a ON l.autor_id = a.id
+     WHERE pa.usuario_id = ?
+     ORDER BY pa.fecha_inicio DESC`,
+    [usuarioId]
+  );
+
+  return [...purchased, ...rented];
+}
+
+async function getBookForReader(bookId, user, ipOrigen) {
+  const [books] = await pool.query(
+    `SELECT l.id, l.titulo, l.isbn, l.contenido_digital, l.portada_url,
+            a.nombre AS autor_nombre, e.nombre AS editorial_nombre
+     FROM libros l
+     LEFT JOIN autores a ON l.autor_id = a.id
+     LEFT JOIN editoriales e ON l.editorial_id = e.id
+     WHERE l.id = ?`,
+    [bookId]
+  );
+
+  if (books.length === 0) {
+    throw new AppError('Libro no encontrado', 404);
+  }
+
+  const book = books[0];
+  if (!book.contenido_digital) {
+    throw new AppError('Este libro aun no tiene contenido digital parametrizado para lectura en pantalla', 404);
+  }
+
+  const isStaff = (user.permisos || []).includes('CATALOGO_EDITAR');
+  let accessType = isStaff ? 'ADMINISTRACION' : null;
+  let expiresAt = null;
+
+  if (!isStaff) {
+    const [purchases] = await pool.query(
+      `SELECT dp.id FROM detalle_pedidos dp
+       INNER JOIN pedidos p ON dp.pedido_id = p.id
+       WHERE p.usuario_id = ? AND dp.libro_id = ? AND dp.tipo_operacion = 'COMPRA' AND p.estado != 'CANCELADO'
+       LIMIT 1`,
+      [user.id, bookId]
+    );
+
+    if (purchases.length > 0) {
+      accessType = 'COMPRA';
+    } else {
+      const [rentals] = await pool.query(
+        `SELECT id, fecha_vencimiento FROM prestamos_alquileres
+         WHERE usuario_id = ? AND libro_id = ? AND estado = 'ACTIVO' AND fecha_vencimiento >= NOW()
+         ORDER BY fecha_vencimiento DESC LIMIT 1`,
+        [user.id, bookId]
+      );
+      if (rentals.length > 0) {
+        accessType = 'ALQUILER';
+        expiresAt = rentals[0].fecha_vencimiento;
+      }
+    }
+  }
+
+  if (!accessType) {
+    throw new AppError('No tienes una compra o alquiler vigente para leer este libro', 403);
+  }
+
+  await logAudit({
+    usuarioId: user.id,
+    accion: 'LECTURA_LIBRO_DIGITAL',
+    entidad: 'libros',
+    entidadId: bookId,
+    detalle: { titulo: book.titulo, tipo_acceso: accessType },
+    ipOrigen
+  });
+
+  return {
+    libro: book,
+    acceso: { tipo: accessType, fecha_vencimiento: expiresAt },
+    lector: {
+      nombre: `${user.nombre} ${user.apellido}`.trim(),
+      email: user.email
+    }
+  };
+}
+
+async function logReaderSecurityEvent(bookId, usuarioId, evento, ipOrigen) {
+  await logAudit({
+    usuarioId,
+    accion: 'ALERTA_SEGURIDAD_LECTOR',
+    entidad: 'libros',
+    entidadId: bookId,
+    detalle: { evento: String(evento || 'INTENTO_CAPTURA').slice(0, 80) },
+    ipOrigen
+  });
+}
+
 module.exports = {
+  validatePaymentDetails,
   createOrder,
   getMyOrders,
   getMyRentals,
+  getMyLibrary,
+  getBookForReader,
+  logReaderSecurityEvent,
   getOrderById,
   getOrderInvoice,
   listAllOrders,

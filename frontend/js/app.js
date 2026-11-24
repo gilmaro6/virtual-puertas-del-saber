@@ -41,7 +41,8 @@ function updateAuthUI() {
     authButtons.classList.add('d-none');
     userMenu.classList.remove('d-none');
     userNameBtn.textContent = `${user.nombre} (${user.rol})`;
-    if (user.rol === 'ADMIN') {
+    const canAdmin = user.rol === 'ADMIN' || (user.permisos || []).includes('PANEL_ADMIN_ACCESO');
+    if (canAdmin) {
       adminLink.classList.remove('d-none');
     } else {
       adminLink.classList.add('d-none');
@@ -412,6 +413,36 @@ document.getElementById('logoutBtn').addEventListener('click', async (e) => {
   showAlert('Sesion cerrada.', 'info');
 });
 
+const paymentMethods = ['TARJETA', 'PSE', 'TRANSFERENCIA', 'EFECTIVO'];
+let currentPayIndex = 0;
+
+function selectPaymentMethod(method) {
+  currentPayIndex = Math.max(paymentMethods.indexOf(method), 0);
+  document.getElementById('paymentMethod').value = method;
+
+  document.querySelectorAll('.pay-slide-btn').forEach((btn) => {
+    const active = btn.dataset.method === method;
+    btn.className = `btn btn-sm ${active ? 'btn-pds' : 'btn-outline-primary'} flex-fill pay-slide-btn`;
+  });
+
+  document.getElementById('paymentFieldsCard').classList.toggle('d-none', method !== 'TARJETA');
+  document.getElementById('paymentFieldsPse').classList.toggle('d-none', method !== 'PSE');
+  document.getElementById('paymentFieldsTransfer').classList.toggle('d-none', method !== 'TRANSFERENCIA');
+  document.getElementById('paymentFieldsCash').classList.toggle('d-none', method !== 'EFECTIVO');
+}
+
+document.querySelectorAll('.pay-slide-btn').forEach((btn) => {
+  btn.addEventListener('click', () => selectPaymentMethod(btn.dataset.method));
+});
+document.getElementById('prevPayBtn').addEventListener('click', () => {
+  currentPayIndex = (currentPayIndex - 1 + paymentMethods.length) % paymentMethods.length;
+  selectPaymentMethod(paymentMethods[currentPayIndex]);
+});
+document.getElementById('nextPayBtn').addEventListener('click', () => {
+  currentPayIndex = (currentPayIndex + 1) % paymentMethods.length;
+  selectPaymentMethod(paymentMethods[currentPayIndex]);
+});
+
 document.getElementById('checkoutForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!getToken()) {
@@ -419,11 +450,38 @@ document.getElementById('checkoutForm').addEventListener('submit', async (e) => 
     return;
   }
 
+  const metodo_pago = document.getElementById('paymentMethod').value;
+  let datos_pago = {};
+
+  if (metodo_pago === 'TARJETA') {
+    datos_pago = {
+      numero_tarjeta: document.getElementById('cardNumber').value,
+      titular: document.getElementById('cardHolder').value,
+      expiracion: document.getElementById('cardExp').value,
+      cvv: document.getElementById('cardCvv').value,
+      cuotas: document.getElementById('cardCuotas').value
+    };
+  } else if (metodo_pago === 'PSE') {
+    datos_pago = {
+      banco: document.getElementById('pseBank').value,
+      tipo_persona: document.getElementById('psePersonType').value,
+      tipo_documento: document.getElementById('pseDocType').value,
+      numero_documento: document.getElementById('pseDocNumber').value,
+      email_pse: document.getElementById('pseEmail').value
+    };
+  } else if (metodo_pago === 'TRANSFERENCIA') {
+    datos_pago = {
+      banco_origen: document.getElementById('transferBank').value,
+      numero_comprobante: document.getElementById('transferRef').value
+    };
+  }
+
   try {
     const res = await apiRequest('/orders', {
       method: 'POST',
       body: JSON.stringify({
-        metodo_pago: document.getElementById('paymentMethod').value,
+        metodo_pago,
+        datos_pago,
         direccion_envio: document.getElementById('shippingAddress').value,
         ciudad: document.getElementById('shippingCity').value
       })
@@ -438,6 +496,49 @@ document.getElementById('checkoutForm').addEventListener('submit', async (e) => 
     new bootstrap.Modal(document.getElementById('orderSuccessModal')).show();
   } catch (error) {
     showAlert(error.message, 'danger');
+  }
+});
+
+document.getElementById('openLibraryBtn').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const body = document.getElementById('accountModalBody');
+  const modal = new bootstrap.Modal(document.getElementById('accountModal'));
+  document.querySelector('#accountModal .modal-title').textContent = 'Mi Biblioteca Digital';
+  body.innerHTML = '<p class="text-muted">Cargando biblioteca...</p>';
+  modal.show();
+
+  try {
+    const res = await apiRequest('/orders/library/my');
+    const items = res.data || [];
+    if (items.length === 0) {
+      body.innerHTML = '<div class="alert alert-light border text-center mb-0">Aun no tienes libros comprados o alquilados.</div>';
+      return;
+    }
+
+    body.innerHTML = `
+      <div class="row g-3">
+        ${items.map((item) => `
+          <div class="col-md-6">
+            <div class="card border h-100">
+              <div class="card-body d-flex justify-content-between align-items-center gap-2">
+                <div>
+                  <h6 class="fw-bold mb-1">${item.titulo}</h6>
+                  <span class="badge bg-${item.tipo_acceso === 'COMPRA' ? 'primary' : 'info text-dark'}">${item.tipo_acceso}</span>
+                  <span class="badge bg-${item.estado_acceso === 'ACTIVO' ? 'success' : 'secondary'}">${item.estado_acceso}</span>
+                  ${item.fecha_vencimiento ? `<div class="small text-muted mt-1">Vence: ${formatDate(item.fecha_vencimiento)}</div>` : ''}
+                </div>
+                ${item.estado_acceso === 'ACTIVO' && item.tiene_contenido_digital
+                  ? `<a href="visor.html?bookId=${item.libro_id}" class="btn btn-pds btn-sm"><i class="bi bi-book-half"></i> Leer</a>`
+                  : '<span class="small text-muted">No disponible</span>'
+                }
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } catch (error) {
+    body.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
   }
 });
 
@@ -478,9 +579,15 @@ document.getElementById('openAccountBtn').addEventListener('click', async (e) =>
             <td>${formatDate(r.fecha_inicio)}</td>
             <td>${formatDate(r.fecha_vencimiento)}</td>
             <td><span class="badge bg-${r.estado === 'ACTIVO' ? 'success' : 'secondary'}">${r.estado}</span></td>
+            <td>
+              ${r.estado === 'ACTIVO'
+                ? `<a href="visor.html?bookId=${r.libro_id}" class="btn btn-sm btn-outline-primary"><i class="bi bi-book-half"></i> Leer</a>`
+                : '-'
+              }
+            </td>
           </tr>
         `).join('')
-      : '<tr><td colspan="4" class="text-center text-muted">No tienes alquileres activos.</td></tr>';
+      : '<tr><td colspan="5" class="text-center text-muted">No tienes alquileres activos.</td></tr>';
 
     body.innerHTML = `
       <h6 class="fw-bold">Mis Pedidos</h6>
@@ -493,7 +600,7 @@ document.getElementById('openAccountBtn').addEventListener('click', async (e) =>
       <h6 class="fw-bold">Mis Alquileres y Prestamos</h6>
       <div class="table-responsive">
         <table class="table table-sm table-bordered">
-          <thead><tr><th>Libro</th><th>Inicio</th><th>Vencimiento</th><th>Estado</th></tr></thead>
+          <thead><tr><th>Libro</th><th>Inicio</th><th>Vencimiento</th><th>Estado</th><th>Lectura</th></tr></thead>
           <tbody>${rentalsHtml}</tbody>
         </table>
       </div>

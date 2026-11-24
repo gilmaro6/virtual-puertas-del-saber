@@ -1,6 +1,6 @@
 const express = require('express');
 const bookController = require('../controllers/bookController');
-const { verifyToken, requireRole } = require('../middlewares/authMiddleware');
+const { verifyToken, requirePermission } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
 
@@ -9,29 +9,32 @@ router.get('/', bookController.listBooks);
 router.get('/meta', bookController.getCatalogMetadata);
 router.get('/:id', bookController.getBookById);
 
-// Resenas (usuarios autenticados)
-router.post('/:id/reviews', verifyToken, bookController.addOrUpdateReview);
+// Contenido editable para administrador/bibliotecario
+router.get('/:id/editor', verifyToken, requirePermission('CATALOGO_EDITAR'), bookController.getBookForEditor);
 
-// Parametrizacion del catalogo (solo ADMIN)
-router.post('/categories', verifyToken, requireRole('ADMIN'), bookController.createCategory);
-router.put('/categories/:id', verifyToken, requireRole('ADMIN'), bookController.updateCategory);
-router.delete('/categories/:id', verifyToken, requireRole('ADMIN'), bookController.deleteCategory);
+// Resenas (usuarios autenticados con permiso)
+router.post('/:id/reviews', verifyToken, requirePermission('ESCRIBIR_RESENAS'), bookController.addOrUpdateReview);
 
-router.post('/authors', verifyToken, requireRole('ADMIN'), bookController.createAuthor);
-router.put('/authors/:id', verifyToken, requireRole('ADMIN'), bookController.updateAuthor);
-router.delete('/authors/:id', verifyToken, requireRole('ADMIN'), bookController.deleteAuthor);
+// Parametrizacion del catalogo
+router.post('/categories', verifyToken, requirePermission('PARAMETRIZACION_GESTIONAR'), bookController.createCategory);
+router.put('/categories/:id', verifyToken, requirePermission('PARAMETRIZACION_GESTIONAR'), bookController.updateCategory);
+router.delete('/categories/:id', verifyToken, requirePermission('PARAMETRIZACION_GESTIONAR'), bookController.deleteCategory);
 
-router.post('/publishers', verifyToken, requireRole('ADMIN'), bookController.createPublisher);
-router.put('/publishers/:id', verifyToken, requireRole('ADMIN'), bookController.updatePublisher);
-router.delete('/publishers/:id', verifyToken, requireRole('ADMIN'), bookController.deletePublisher);
+router.post('/authors', verifyToken, requirePermission('PARAMETRIZACION_GESTIONAR'), bookController.createAuthor);
+router.put('/authors/:id', verifyToken, requirePermission('PARAMETRIZACION_GESTIONAR'), bookController.updateAuthor);
+router.delete('/authors/:id', verifyToken, requirePermission('PARAMETRIZACION_GESTIONAR'), bookController.deleteAuthor);
 
-router.post('/formats', verifyToken, requireRole('ADMIN'), bookController.createFormat);
-router.put('/formats/:id', verifyToken, requireRole('ADMIN'), bookController.updateFormat);
-router.delete('/formats/:id', verifyToken, requireRole('ADMIN'), bookController.deleteFormat);
+router.post('/publishers', verifyToken, requirePermission('PARAMETRIZACION_GESTIONAR'), bookController.createPublisher);
+router.put('/publishers/:id', verifyToken, requirePermission('PARAMETRIZACION_GESTIONAR'), bookController.updatePublisher);
+router.delete('/publishers/:id', verifyToken, requirePermission('PARAMETRIZACION_GESTIONAR'), bookController.deletePublisher);
 
-// Administracion de libros (solo ADMIN)
-router.post('/', verifyToken, requireRole('ADMIN'), bookController.createBook);
-router.put('/:id', verifyToken, requireRole('ADMIN'), bookController.updateBook);
-router.delete('/:id', verifyToken, requireRole('ADMIN'), bookController.deleteBook);
+router.post('/formats', verifyToken, requirePermission('PARAMETRIZACION_GESTIONAR'), bookController.createFormat);
+router.put('/formats/:id', verifyToken, requirePermission('PARAMETRIZACION_GESTIONAR'), bookController.updateFormat);
+router.delete('/formats/:id', verifyToken, requirePermission('PARAMETRIZACION_GESTIONAR'), bookController.deleteFormat);
+
+// Administracion de libros
+router.post('/', verifyToken, requirePermission('CATALOGO_CREAR'), bookController.createBook);
+router.put('/:id', verifyToken, requirePermission('CATALOGO_EDITAR'), bookController.updateBook);
+router.delete('/:id', verifyToken, requirePermission('CATALOGO_ELIMINAR'), bookController.deleteBook);
 
 module.exports = router;

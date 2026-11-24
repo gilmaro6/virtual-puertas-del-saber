@@ -90,10 +90,40 @@ async function getOrderInvoice(req, res, next) {
   }
 }
 
+async function getMyLibrary(req, res, next) {
+  try {
+    const library = await orderService.getMyLibrary(req.user.id);
+    res.status(200).json({ status: 'ok', data: library });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getBookForReader(req, res, next) {
+  try {
+    const data = await orderService.getBookForReader(req.params.bookId, req.user, req.ip);
+    res.status(200).json({ status: 'ok', data });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function logReaderSecurityEvent(req, res, next) {
+  try {
+    await orderService.logReaderSecurityEvent(req.params.bookId, req.user.id, req.body.evento, req.ip);
+    res.status(200).json({ status: 'ok' });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   createOrder,
   getMyOrders,
   getMyRentals,
+  getMyLibrary,
+  getBookForReader,
+  logReaderSecurityEvent,
   getOrderById,
   getOrderInvoice,
   listAllOrders,

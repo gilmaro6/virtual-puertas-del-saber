@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/database');
 const AppError = require('../utils/appError');
 const { logAudit } = require('./auditService');
+const { getEffectivePermissions } = require('./roleService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'clave_secreta_desarrollo';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
@@ -80,10 +81,12 @@ async function register({ nombre, apellido, email, password, telefono = null, do
 
   const id = uuidv4();
   const passwordHash = await bcrypt.hash(password, 10);
+  const [roleRows] = await pool.query("SELECT id FROM roles WHERE nombre = 'CLIENTE' LIMIT 1");
+  const rolId = roleRows.length > 0 ? roleRows[0].id : null;
 
   await pool.query(
-    `INSERT INTO usuarios (id, nombre, apellido, email, telefono, documento_identidad, password_hash, rol)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'CLIENTE')`,
+    `INSERT INTO usuarios (id, nombre, apellido, email, telefono, documento_identidad, password_hash, rol, rol_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'CLIENTE', ?)`,
     [
       id,
       nombre.trim(),
@@ -91,16 +94,19 @@ async function register({ nombre, apellido, email, password, telefono = null, do
       normalizedEmail,
       telefono ? telefono.trim() : null,
       documentoIdentidad ? documentoIdentidad.trim() : null,
-      passwordHash
+      passwordHash,
+      rolId
     ]
   );
 
+  const permisos = await getEffectivePermissions(id, 'CLIENTE');
   const user = {
     id,
     nombre: nombre.trim(),
     apellido: apellido.trim(),
     email: normalizedEmail,
-    rol: 'CLIENTE'
+    rol: 'CLIENTE',
+    permisos
   };
 
   const token = generateAccessToken(user);
@@ -175,12 +181,14 @@ async function login({ email, password, captchaToken, captchaAnswer }, ipOrigen)
     [user.id]
   );
 
+  const permisos = await getEffectivePermissions(user.id, user.rol);
   const safeUser = {
     id: user.id,
     nombre: user.nombre,
     apellido: user.apellido,
     email: user.email,
-    rol: user.rol
+    rol: user.rol,
+    permisos
   };
 
   const token = generateAccessToken(safeUser);

@@ -46,6 +46,7 @@
               Mi cuenta
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="#" id="openLibraryBtn"><i class="bi bi-book"></i> Mi Biblioteca Digital</a></li>
               <li><a class="dropdown-item" href="#" id="openAccountBtn"><i class="bi bi-clock-history"></i> Mis pedidos y alquileres</a></li>
               <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item text-danger" href="#" id="logoutBtn"><i class="bi bi-box-arrow-right"></i> Cerrar sesion</a></li>
@@ -120,14 +121,93 @@
         </div>
         <form id="checkoutForm">
           <div class="mb-2">
-            <label class="form-label small fw-semibold">Metodo de pago</label>
-            <select class="form-select form-select-sm" id="paymentMethod" required>
-              <option value="TARJETA">Tarjeta de Credito / Debito</option>
-              <option value="PSE">PSE</option>
-              <option value="TRANSFERENCIA">Transferencia Bancaria</option>
-              <option value="EFECTIVO">Pago Contraentrega</option>
-            </select>
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label small fw-bold mb-0">Pasarela de Pago</label>
+              <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary" id="prevPayBtn" title="Anterior"><i class="bi bi-chevron-left"></i></button>
+                <button type="button" class="btn btn-outline-secondary" id="nextPayBtn" title="Siguiente"><i class="bi bi-chevron-right"></i></button>
+              </div>
+            </div>
+            <div class="d-flex gap-1 mb-2" id="paymentCarouselTabs">
+              <button type="button" class="btn btn-sm btn-pds flex-fill pay-slide-btn" data-method="TARJETA"><i class="bi bi-credit-card"></i> Tarjeta</button>
+              <button type="button" class="btn btn-sm btn-outline-primary flex-fill pay-slide-btn" data-method="PSE"><i class="bi bi-bank"></i> PSE</button>
+              <button type="button" class="btn btn-sm btn-outline-primary flex-fill pay-slide-btn" data-method="TRANSFERENCIA"><i class="bi bi-arrow-left-right"></i> Transf.</button>
+              <button type="button" class="btn btn-sm btn-outline-primary flex-fill pay-slide-btn" data-method="EFECTIVO"><i class="bi bi-cash-coin"></i> Efectivo</button>
+            </div>
+            <input type="hidden" id="paymentMethod" value="TARJETA">
           </div>
+
+          <!-- Formulario dinamico por metodo de pago -->
+          <div id="paymentFieldsCard" class="p-2 mb-2 rounded border bg-light small">
+            <div class="mb-2">
+              <input type="text" class="form-control form-control-sm" id="cardNumber" placeholder="Numero de tarjeta (16 digitos)" maxlength="19">
+            </div>
+            <div class="mb-2">
+              <input type="text" class="form-control form-control-sm" id="cardHolder" placeholder="Nombre del titular">
+            </div>
+            <div class="row g-1">
+              <div class="col-4">
+                <input type="text" class="form-control form-control-sm" id="cardExp" placeholder="MM/AA" maxlength="5">
+              </div>
+              <div class="col-4">
+                <input type="password" class="form-control form-control-sm" id="cardCvv" placeholder="CVV" maxlength="4">
+              </div>
+              <div class="col-4">
+                <select class="form-select form-select-sm" id="cardCuotas">
+                  <option value="1">1 cuota</option>
+                  <option value="3">3 cuotas</option>
+                  <option value="6">6 cuotas</option>
+                  <option value="12">12 cuotas</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div id="paymentFieldsPse" class="p-2 mb-2 rounded border bg-light small d-none">
+            <div class="mb-2">
+              <select class="form-select form-select-sm" id="pseBank">
+                <option value="">Selecciona tu entidad bancaria...</option>
+                <option value="Bancolombia">Bancolombia</option>
+                <option value="Davivienda">Davivienda</option>
+                <option value="Banco de Bogota">Banco de Bogota</option>
+                <option value="BBVA Colombia">BBVA Colombia</option>
+                <option value="Nequi">Nequi</option>
+                <option value="Daviplata">Daviplata</option>
+              </select>
+            </div>
+            <div class="row g-1 mb-2">
+              <div class="col-5">
+                <select class="form-select form-select-sm" id="psePersonType">
+                  <option value="NATURAL">Persona Natural</option>
+                  <option value="JURIDICA">Persona Juridica</option>
+                </select>
+              </div>
+              <div class="col-3">
+                <select class="form-select form-select-sm" id="pseDocType">
+                  <option value="CC">CC</option>
+                  <option value="CE">CE</option>
+                  <option value="NIT">NIT</option>
+                </select>
+              </div>
+              <div class="col-4">
+                <input type="text" class="form-control form-control-sm" id="pseDocNumber" placeholder="Documento">
+              </div>
+            </div>
+            <input type="email" class="form-control form-control-sm" id="pseEmail" placeholder="Correo registrado en PSE">
+          </div>
+
+          <div id="paymentFieldsTransfer" class="p-2 mb-2 rounded border bg-light small d-none">
+            <div class="text-muted mb-2">Cuenta Ahorros Bancolombia #123-456789-00 (Danzara)</div>
+            <div class="mb-2">
+              <input type="text" class="form-control form-control-sm" id="transferBank" placeholder="Banco o billetera de origen">
+            </div>
+            <input type="text" class="form-control form-control-sm" id="transferRef" placeholder="Numero de comprobante">
+          </div>
+
+          <div id="paymentFieldsCash" class="p-2 mb-2 rounded border bg-light small d-none">
+            <span class="text-muted">Pago contraentrega al recibir tu pedido fisico.</span>
+          </div>
+
           <div class="mb-2">
             <input type="text" class="form-control form-control-sm" id="shippingAddress" placeholder="Direccion de envio (si aplica)">
           </div>
@@ -307,7 +387,7 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="js/api.js?v=5"></script>
-  <script src="js/app.js?v=5"></script>
+  <script src="js/api.js?v=6"></script>
+  <script src="js/app.js?v=6"></script>
 </body>
 </html>

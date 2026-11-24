@@ -8,8 +8,44 @@ CREATE DATABASE IF NOT EXISTS puertas_del_saber_db
 USE puertas_del_saber_db;
 
 -- ==========================================================
--- 1. MODULO DE USUARIOS, VALIDACION Y SESIONES
+-- 1. MODULO DE ROLES, PERMISOS, USUARIOS Y SESIONES (RBAC)
 -- ==========================================================
+
+CREATE TABLE IF NOT EXISTS roles (
+  id CHAR(36) NOT NULL,
+  nombre VARCHAR(50) NOT NULL,
+  descripcion VARCHAR(255) NULL,
+  es_sistema TINYINT(1) NOT NULL DEFAULT 0,
+  activo TINYINT(1) NOT NULL DEFAULT 1,
+  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_roles_nombre (nombre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS permisos (
+  id CHAR(36) NOT NULL,
+  codigo VARCHAR(60) NOT NULL,
+  modulo VARCHAR(50) NOT NULL,
+  nombre VARCHAR(100) NOT NULL,
+  descripcion VARCHAR(255) NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_permisos_codigo (codigo),
+  KEY idx_permisos_modulo (modulo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS rol_permisos (
+  rol_id CHAR(36) NOT NULL,
+  permiso_id CHAR(36) NOT NULL,
+  PRIMARY KEY (rol_id, permiso_id),
+  CONSTRAINT fk_rp_rol
+    FOREIGN KEY (rol_id) REFERENCES roles (id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT fk_rp_permiso
+    FOREIGN KEY (permiso_id) REFERENCES permisos (id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS usuarios (
   id CHAR(36) NOT NULL,
@@ -19,7 +55,8 @@ CREATE TABLE IF NOT EXISTS usuarios (
   telefono VARCHAR(25) NULL,
   documento_identidad VARCHAR(30) NULL,
   password_hash VARCHAR(255) NOT NULL,
-  rol ENUM('ADMIN', 'CLIENTE') NOT NULL DEFAULT 'CLIENTE',
+  rol VARCHAR(50) NOT NULL DEFAULT 'CLIENTE',
+  rol_id CHAR(36) NULL,
   email_verificado TINYINT(1) NOT NULL DEFAULT 0,
   estado ENUM('ACTIVO', 'INACTIVO', 'BLOQUEADO') NOT NULL DEFAULT 'ACTIVO',
   intentos_fallidos INT NOT NULL DEFAULT 0,
@@ -29,7 +66,29 @@ CREATE TABLE IF NOT EXISTS usuarios (
   PRIMARY KEY (id),
   UNIQUE KEY uk_usuarios_email (email),
   UNIQUE KEY uk_usuarios_documento (documento_identidad),
-  KEY idx_usuarios_rol_estado (rol, estado)
+  KEY idx_usuarios_rol_estado (rol, estado),
+  KEY idx_usuarios_rol_id (rol_id),
+  CONSTRAINT fk_usuarios_rol
+    FOREIGN KEY (rol_id) REFERENCES roles (id)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS usuario_permisos (
+  usuario_id CHAR(36) NOT NULL,
+  permiso_id CHAR(36) NOT NULL,
+  concedido TINYINT(1) NOT NULL DEFAULT 1,
+  asignado_por CHAR(36) NULL,
+  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (usuario_id, permiso_id),
+  CONSTRAINT fk_up_usuario
+    FOREIGN KEY (usuario_id) REFERENCES usuarios (id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT fk_up_permiso
+    FOREIGN KEY (permiso_id) REFERENCES permisos (id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS tokens_sesion (
@@ -114,6 +173,8 @@ CREATE TABLE IF NOT EXISTS libros (
   stock_minimo INT NOT NULL DEFAULT 3,
   portada_url VARCHAR(255) NULL,
   archivo_digital_url VARCHAR(255) NULL,
+  contenido_digital LONGTEXT NULL,
+  dias_alquiler INT NOT NULL DEFAULT 15,
   categoria_id CHAR(36) NULL,
   autor_id CHAR(36) NULL,
   editorial_id CHAR(36) NULL,
@@ -272,6 +333,7 @@ CREATE TABLE IF NOT EXISTS pagos (
   referencia_transaccion VARCHAR(100) NOT NULL,
   monto DECIMAL(10, 2) NOT NULL,
   estado ENUM('PENDIENTE', 'APROBADO', 'RECHAZADO', 'REEMBOLSADO') NOT NULL DEFAULT 'PENDIENTE',
+  detalle_pago JSON NULL,
   fecha_pago TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uk_pagos_referencia (referencia_transaccion),
@@ -393,6 +455,8 @@ SELECT
   l.stock_fisico,
   l.stock_minimo,
   l.portada_url,
+  l.dias_alquiler,
+  (l.contenido_digital IS NOT NULL AND CHAR_LENGTH(l.contenido_digital) > 0) AS tiene_contenido_digital,
   l.estado,
   c.id AS categoria_id,
   c.nombre AS categoria_nombre,
@@ -415,15 +479,72 @@ GROUP BY
   l.id, l.titulo, l.isbn, l.sinopsis, l.anio_publicacion,
   l.idioma, l.paginas, f.id, f.codigo, f.nombre, f.requiere_stock,
   l.precio_venta, l.precio_alquiler, l.stock_fisico, l.stock_minimo,
-  l.portada_url, l.estado,
+  l.portada_url, l.dias_alquiler, l.estado,
   c.id, c.nombre, c.slug,
   a.id, a.nombre,
   e.id, e.nombre,
   l.creado_en, l.actualizado_en;
 
 -- ==========================================================
--- 6. DATOS INICIALES DE CATALOGO (SEED)
+-- 6. DATOS INICIALES DE ROLES, PERMISOS Y CATALOGO (SEED)
 -- ==========================================================
+
+INSERT IGNORE INTO roles (id, nombre, descripcion, es_sistema) VALUES
+  ('90000000-0000-4000-8000-000000000001', 'ADMIN', 'Administrador total del sistema con acceso a todos los modulos', 1),
+  ('90000000-0000-4000-8000-000000000002', 'BIBLIOTECARIO', 'Gestion de catalogo, contenido digital, inventario y devoluciones', 1),
+  ('90000000-0000-4000-8000-000000000003', 'SOPORTE_CLIENTE', 'Atencion al cliente, gestion de usuarios y seguimiento de pedidos', 1),
+  ('90000000-0000-4000-8000-000000000004', 'CLIENTE_VIP', 'Cliente con acceso completo de lectura, compra, alquiler y resenas', 0),
+  ('90000000-0000-4000-8000-000000000005', 'CLIENTE', 'Cliente estandar para compra, alquiler y lectura de libros digitales', 1);
+
+INSERT IGNORE INTO permisos (id, codigo, modulo, nombre, descripcion) VALUES
+  ('91000000-0000-4000-8000-000000000001', 'PANEL_ADMIN_ACCESO', 'Administracion', 'Acceso al panel administrativo', 'Permite ingresar al panel de administracion'),
+  ('91000000-0000-4000-8000-000000000002', 'DASHBOARD_VER', 'Dashboard', 'Ver indicadores y reportes', 'Acceso a graficas, alertas de stock y exportacion CSV'),
+  ('91000000-0000-4000-8000-000000000003', 'CATALOGO_CREAR', 'Catalogo', 'Crear libros', 'Registrar nuevos libros y su contenido digital'),
+  ('91000000-0000-4000-8000-000000000004', 'CATALOGO_EDITAR', 'Catalogo', 'Editar libros', 'Actualizar informacion, stock, portadas y contenido digital'),
+  ('91000000-0000-4000-8000-000000000005', 'CATALOGO_ELIMINAR', 'Catalogo', 'Descontinuar libros', 'Descontinuar libros del catalogo publico'),
+  ('91000000-0000-4000-8000-000000000006', 'PARAMETRIZACION_GESTIONAR', 'Catalogo', 'Gestionar parametrizacion', 'Crear, editar y eliminar categorias, autores, editoriales y formatos'),
+  ('91000000-0000-4000-8000-000000000007', 'USUARIOS_VER', 'Usuarios', 'Ver usuarios', 'Listar y buscar usuarios registrados'),
+  ('91000000-0000-4000-8000-000000000008', 'USUARIOS_EDITAR', 'Usuarios', 'Editar usuarios', 'Actualizar datos, rol y estado de usuarios'),
+  ('91000000-0000-4000-8000-000000000009', 'USUARIOS_RESET_PASSWORD', 'Usuarios', 'Restablecer contrasenas', 'Cambiar contrasena de usuarios desde soporte'),
+  ('91000000-0000-4000-8000-000000000010', 'ROLES_PERMISOS_GESTIONAR', 'Seguridad', 'Gestionar roles y permisos', 'Crear roles y asignar permisos a roles o usuarios'),
+  ('91000000-0000-4000-8000-000000000011', 'PEDIDOS_VER_TODOS', 'Pedidos', 'Ver todos los pedidos', 'Consultar todos los pedidos y facturas de clientes'),
+  ('91000000-0000-4000-8000-000000000012', 'PEDIDOS_CAMBIAR_ESTADO', 'Pedidos', 'Actualizar estado de pedidos', 'Cambiar estado de pedidos y registrar devoluciones'),
+  ('91000000-0000-4000-8000-000000000013', 'INVENTARIO_VER', 'Historial', 'Ver historial de inventario', 'Consultar movimientos de entrada y salida de stock'),
+  ('91000000-0000-4000-8000-000000000014', 'AUDITORIA_VER', 'Historial', 'Ver bitacora de auditoria', 'Consultar registros de seguridad y acciones del sistema'),
+  ('91000000-0000-4000-8000-000000000015', 'COMPRAR_LIBROS', 'Cliente', 'Comprar libros', 'Agregar libros para compra y confirmar pedidos'),
+  ('91000000-0000-4000-8000-000000000016', 'ALQUILAR_LIBROS', 'Cliente', 'Alquilar libros', 'Solicitar alquiler temporal de libros'),
+  ('91000000-0000-4000-8000-000000000017', 'LEER_LIBROS_DIGITALES', 'Cliente', 'Leer libros digitales', 'Visualizar contenido en pantalla de libros comprados o alquilados'),
+  ('91000000-0000-4000-8000-000000000018', 'ESCRIBIR_RESENAS', 'Cliente', 'Publicar resenas', 'Calificar y comentar libros del catalogo');
+
+-- Todos los permisos para ADMIN
+INSERT IGNORE INTO rol_permisos (rol_id, permiso_id)
+SELECT '90000000-0000-4000-8000-000000000001', id FROM permisos;
+
+-- Permisos para BIBLIOTECARIO
+INSERT IGNORE INTO rol_permisos (rol_id, permiso_id)
+SELECT '90000000-0000-4000-8000-000000000002', id FROM permisos
+WHERE codigo IN (
+  'PANEL_ADMIN_ACCESO', 'DASHBOARD_VER', 'CATALOGO_CREAR', 'CATALOGO_EDITAR',
+  'PARAMETRIZACION_GESTIONAR', 'PEDIDOS_VER_TODOS', 'PEDIDOS_CAMBIAR_ESTADO',
+  'INVENTARIO_VER', 'LEER_LIBROS_DIGITALES'
+);
+
+-- Permisos para SOPORTE_CLIENTE
+INSERT IGNORE INTO rol_permisos (rol_id, permiso_id)
+SELECT '90000000-0000-4000-8000-000000000003', id FROM permisos
+WHERE codigo IN (
+  'PANEL_ADMIN_ACCESO', 'USUARIOS_VER', 'USUARIOS_EDITAR',
+  'USUARIOS_RESET_PASSWORD', 'PEDIDOS_VER_TODOS', 'PEDIDOS_CAMBIAR_ESTADO'
+);
+
+-- Permisos para CLIENTE y CLIENTE_VIP
+INSERT IGNORE INTO rol_permisos (rol_id, permiso_id)
+SELECT '90000000-0000-4000-8000-000000000004', id FROM permisos
+WHERE modulo = 'Cliente';
+
+INSERT IGNORE INTO rol_permisos (rol_id, permiso_id)
+SELECT '90000000-0000-4000-8000-000000000005', id FROM permisos
+WHERE modulo = 'Cliente';
 
 INSERT IGNORE INTO categorias (id, nombre, slug, descripcion) VALUES
   ('0cef715a-eaed-4037-8207-6daf7d281432', 'Musica', 'musica', 'Libros de contenido musical y artistas'),
@@ -526,3 +647,12 @@ INSERT IGNORE INTO libros (
     '44444444-4444-4444-8444-444444444402',
     'DISPONIBLE'
   );
+
+UPDATE libros
+SET contenido_digital = CONCAT(
+  'Capitulo 1 - ', titulo, '\n\n',
+  'Material digital autorizado para lectura en linea dentro de la Libreria Virtual Danzara. ',
+  'Este contenido cuenta con proteccion contra copia, impresion o captura no autorizada.\n\n',
+  COALESCE(sinopsis, '')
+)
+WHERE contenido_digital IS NULL;

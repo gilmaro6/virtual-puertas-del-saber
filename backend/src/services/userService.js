@@ -33,14 +33,14 @@ async function updateUser(userId, data, adminId, ipOrigen) {
   }
 
   const current = rows[0];
-  const validRoles = ['ADMIN', 'CLIENTE'];
   const validStates = ['ACTIVO', 'INACTIVO', 'BLOQUEADO'];
 
-  const nextRol = data.rol || current.rol;
+  const nextRol = data.rol ? data.rol.trim().toUpperCase() : current.rol;
   const nextEstado = data.estado || current.estado;
 
-  if (!validRoles.includes(nextRol)) {
-    throw new AppError('Rol invalido', 400);
+  const [roleRows] = await pool.query('SELECT id, nombre FROM roles WHERE nombre = ? AND activo = 1', [nextRol]);
+  if (roleRows.length === 0) {
+    throw new AppError('El rol seleccionado no existe o esta inactivo', 400);
   }
   if (!validStates.includes(nextEstado)) {
     throw new AppError('Estado invalido', 400);
@@ -51,7 +51,7 @@ async function updateUser(userId, data, adminId, ipOrigen) {
   await pool.query(
     `UPDATE usuarios
      SET nombre = ?, apellido = ?, telefono = ?, documento_identidad = ?,
-         rol = ?, estado = ?, intentos_fallidos = ?
+         rol = ?, rol_id = ?, estado = ?, intentos_fallidos = ?
      WHERE id = ?`,
     [
       data.nombre !== undefined ? data.nombre.trim() : current.nombre,
@@ -60,7 +60,8 @@ async function updateUser(userId, data, adminId, ipOrigen) {
       data.documento_identidad !== undefined
         ? (data.documento_identidad ? data.documento_identidad.trim() : null)
         : current.documento_identidad,
-      nextRol,
+      roleRows[0].nombre,
+      roleRows[0].id,
       nextEstado,
       resetAttempts,
       userId

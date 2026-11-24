@@ -1,24 +1,27 @@
 const express = require('express');
 const orderController = require('../controllers/orderController');
-const { verifyToken, requireRole } = require('../middlewares/authMiddleware');
+const { verifyToken, requirePermission } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
 
 router.use(verifyToken);
 
 // Rutas del cliente autenticado
-router.post('/', orderController.createOrder);
+router.post('/', requirePermission('COMPRAR_LIBROS', 'ALQUILAR_LIBROS'), orderController.createOrder);
 router.get('/my', orderController.getMyOrders);
 router.get('/rentals/my', orderController.getMyRentals);
+router.get('/library/my', requirePermission('LEER_LIBROS_DIGITALES'), orderController.getMyLibrary);
+router.get('/reader/:bookId', requirePermission('LEER_LIBROS_DIGITALES', 'CATALOGO_EDITAR'), orderController.getBookForReader);
+router.post('/reader/:bookId/security-event', orderController.logReaderSecurityEvent);
 
-// Rutas de administracion e historial (solo ADMIN)
-router.get('/history/inventory', requireRole('ADMIN'), orderController.getInventoryHistory);
-router.get('/history/audit', requireRole('ADMIN'), orderController.getAuditHistory);
-router.get('/', requireRole('ADMIN'), orderController.listAllOrders);
-router.patch('/:id/status', requireRole('ADMIN'), orderController.updateOrderStatus);
-router.patch('/rentals/:rentalId/return', requireRole('ADMIN'), orderController.returnRental);
+// Rutas de administracion e historial por permisos
+router.get('/history/inventory', requirePermission('INVENTARIO_VER'), orderController.getInventoryHistory);
+router.get('/history/audit', requirePermission('AUDITORIA_VER'), orderController.getAuditHistory);
+router.get('/', requirePermission('PEDIDOS_VER_TODOS'), orderController.listAllOrders);
+router.patch('/:id/status', requirePermission('PEDIDOS_CAMBIAR_ESTADO'), orderController.updateOrderStatus);
+router.patch('/rentals/:rentalId/return', requirePermission('PEDIDOS_CAMBIAR_ESTADO'), orderController.returnRental);
 
-// Detalle y factura de un pedido (dueno o ADMIN)
+// Detalle y factura de un pedido (dueno o usuario con permiso PEDIDOS_VER_TODOS)
 router.get('/:id/invoice', orderController.getOrderInvoice);
 router.get('/:id', orderController.getOrderById);
 

@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { pool } = require('../config/database');
 const AppError = require('../utils/appError');
+const { getEffectivePermissions } = require('../services/roleService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'clave_secreta_desarrollo';
 
@@ -34,6 +35,7 @@ async function verifyToken(req, res, next) {
       return next(new AppError('Cuenta inactiva o bloqueada', 403));
     }
 
+    user.permisos = await getEffectivePermissions(user.id, user.rol);
     req.user = user;
     next();
   } catch (error) {
@@ -55,7 +57,25 @@ function requireRole(...rolesPermitidos) {
   };
 }
 
+function requirePermission(...permisosRequeridos) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return next(new AppError('Usuario no autenticado', 401));
+    }
+
+    const userPerms = req.user.permisos || [];
+    const hasAccess = permisosRequeridos.some((perm) => userPerms.includes(perm));
+
+    if (!hasAccess) {
+      return next(new AppError('No tienes el permiso requerido para realizar esta accion', 403));
+    }
+
+    next();
+  };
+}
+
 module.exports = {
   verifyToken,
-  requireRole
+  requireRole,
+  requirePermission
 };

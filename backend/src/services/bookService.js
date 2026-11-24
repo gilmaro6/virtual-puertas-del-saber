@@ -104,6 +104,14 @@ async function getBookById(id) {
   };
 }
 
+async function getBookForEditor(id) {
+  const [rows] = await pool.query('SELECT * FROM libros WHERE id = ?', [id]);
+  if (rows.length === 0) {
+    throw new AppError('Libro no encontrado', 404);
+  }
+  return rows[0];
+}
+
 async function getCatalogMetadata() {
   const [categorias] = await pool.query(
     `SELECT c.id, c.nombre, c.slug, c.descripcion, COUNT(l.id) AS libros_asociados
@@ -154,6 +162,8 @@ async function createBook(data, usuarioId, ipOrigen) {
     stock_minimo = 3,
     portada_url = null,
     archivo_digital_url = null,
+    contenido_digital = null,
+    dias_alquiler = 15,
     categoria_id = null,
     autor_id = null,
     editorial_id = null
@@ -187,8 +197,8 @@ async function createBook(data, usuarioId, ipOrigen) {
       `INSERT INTO libros (
         id, titulo, isbn, sinopsis, anio_publicacion, idioma, paginas, formato_id,
         precio_venta, precio_alquiler, stock_fisico, stock_minimo,
-        portada_url, archivo_digital_url, categoria_id, autor_id, editorial_id, estado
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        portada_url, archivo_digital_url, contenido_digital, dias_alquiler, categoria_id, autor_id, editorial_id, estado
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         titulo.trim(),
@@ -204,6 +214,8 @@ async function createBook(data, usuarioId, ipOrigen) {
         Number(stock_minimo) || 0,
         portada_url,
         archivo_digital_url,
+        contenido_digital || null,
+        Math.max(Number(dias_alquiler) || 15, 1),
         categoria_id || null,
         autor_id || null,
         editorial_id || null,
@@ -267,7 +279,8 @@ async function updateBook(id, data, usuarioId, ipOrigen) {
       `UPDATE libros SET
         titulo = ?, isbn = ?, sinopsis = ?, anio_publicacion = ?, idioma = ?, paginas = ?,
         formato_id = ?, precio_venta = ?, precio_alquiler = ?, stock_fisico = ?, stock_minimo = ?,
-        portada_url = ?, archivo_digital_url = ?, categoria_id = ?, autor_id = ?, editorial_id = ?, estado = ?
+        portada_url = ?, archivo_digital_url = ?, contenido_digital = ?, dias_alquiler = ?,
+        categoria_id = ?, autor_id = ?, editorial_id = ?, estado = ?
        WHERE id = ?`,
       [
         data.titulo !== undefined ? data.titulo.trim() : current.titulo,
@@ -283,6 +296,8 @@ async function updateBook(id, data, usuarioId, ipOrigen) {
         data.stock_minimo !== undefined ? Number(data.stock_minimo) : current.stock_minimo,
         data.portada_url !== undefined ? data.portada_url : current.portada_url,
         data.archivo_digital_url !== undefined ? data.archivo_digital_url : current.archivo_digital_url,
+        data.contenido_digital !== undefined ? data.contenido_digital : current.contenido_digital,
+        data.dias_alquiler !== undefined ? Math.max(Number(data.dias_alquiler) || 15, 1) : current.dias_alquiler,
         data.categoria_id !== undefined ? (data.categoria_id || null) : current.categoria_id,
         data.autor_id !== undefined ? (data.autor_id || null) : current.autor_id,
         data.editorial_id !== undefined ? (data.editorial_id || null) : current.editorial_id,
@@ -535,6 +550,7 @@ async function deleteFormat(id, usuarioId, ipOrigen) {
 module.exports = {
   listBooks,
   getBookById,
+  getBookForEditor,
   getCatalogMetadata,
   createBook,
   updateBook,

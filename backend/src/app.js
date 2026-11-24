@@ -14,6 +14,8 @@ const bookRoutes = require('./routes/bookRoutes');
 const cartRoutes = require('./routes/cartRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const userRoutes = require('./routes/userRoutes');
+const roleRoutes = require('./routes/roleRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
 
 const app = express();
 
@@ -61,6 +63,8 @@ app.use('/api/books', bookRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/roles', roleRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Servir frontend estatico cuando esta disponible
 const frontendPath = path.resolve(__dirname, '../../frontend');
