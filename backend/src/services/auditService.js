@@ -12,7 +12,7 @@ async function logAudit({ usuarioId = null, accion, entidad, entidadId = null, d
         usuarioId,
         accion,
         entidad,
-        entidadId,
+        entidadId !== null && entidadId !== undefined ? String(entidadId) : null,
         detalle ? JSON.stringify(detalle) : null,
         ipOrigen
       ]

@@ -12,7 +12,7 @@ USE puertas_del_saber_db;
 -- ==========================================================
 
 CREATE TABLE IF NOT EXISTS roles (
-  id CHAR(36) NOT NULL,
+  id INT NOT NULL AUTO_INCREMENT,
   nombre VARCHAR(50) NOT NULL,
   descripcion VARCHAR(255) NULL,
   es_sistema TINYINT(1) NOT NULL DEFAULT 0,
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS roles (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS permisos (
-  id CHAR(36) NOT NULL,
+  id INT NOT NULL AUTO_INCREMENT,
   codigo VARCHAR(60) NOT NULL,
   modulo VARCHAR(50) NOT NULL,
   nombre VARCHAR(100) NOT NULL,
@@ -34,8 +34,8 @@ CREATE TABLE IF NOT EXISTS permisos (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS rol_permisos (
-  rol_id CHAR(36) NOT NULL,
-  permiso_id CHAR(36) NOT NULL,
+  rol_id INT NOT NULL,
+  permiso_id INT NOT NULL,
   PRIMARY KEY (rol_id, permiso_id),
   CONSTRAINT fk_rp_rol
     FOREIGN KEY (rol_id) REFERENCES roles (id)
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
   documento_identidad VARCHAR(30) NULL,
   password_hash VARCHAR(255) NOT NULL,
   rol VARCHAR(50) NOT NULL DEFAULT 'CLIENTE',
-  rol_id CHAR(36) NULL,
+  rol_id INT NULL,
   email_verificado TINYINT(1) NOT NULL DEFAULT 0,
   estado ENUM('ACTIVO', 'INACTIVO', 'BLOQUEADO') NOT NULL DEFAULT 'ACTIVO',
   intentos_fallidos INT NOT NULL DEFAULT 0,
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 
 CREATE TABLE IF NOT EXISTS usuario_permisos (
   usuario_id CHAR(36) NOT NULL,
-  permiso_id CHAR(36) NOT NULL,
+  permiso_id INT NOT NULL,
   concedido TINYINT(1) NOT NULL DEFAULT 1,
   asignado_por CHAR(36) NULL,
   creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS tokens_sesion (
 -- ==========================================================
 
 CREATE TABLE IF NOT EXISTS categorias (
-  id CHAR(36) NOT NULL,
+  id INT NOT NULL AUTO_INCREMENT,
   nombre VARCHAR(80) NOT NULL,
   slug VARCHAR(100) NOT NULL,
   descripcion VARCHAR(255) NULL,
@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS categorias (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS autores (
-  id CHAR(36) NOT NULL,
+  id INT NOT NULL AUTO_INCREMENT,
   nombre VARCHAR(150) NOT NULL,
   nacionalidad VARCHAR(80) NULL,
   biografia TEXT NULL,
@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS autores (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS editoriales (
-  id CHAR(36) NOT NULL,
+  id INT NOT NULL AUTO_INCREMENT,
   nombre VARCHAR(120) NOT NULL,
   pais VARCHAR(80) NULL,
   sitio_web VARCHAR(200) NULL,
@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS editoriales (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS formatos (
-  id CHAR(36) NOT NULL,
+  id INT NOT NULL AUTO_INCREMENT,
   codigo VARCHAR(30) NOT NULL,
   nombre VARCHAR(60) NOT NULL,
   descripcion VARCHAR(255) NULL,
@@ -166,7 +166,7 @@ CREATE TABLE IF NOT EXISTS libros (
   anio_publicacion SMALLINT NULL,
   idioma VARCHAR(30) NOT NULL DEFAULT 'Espanol',
   paginas INT NULL,
-  formato_id CHAR(36) NOT NULL,
+  formato_id INT NOT NULL,
   precio_venta DECIMAL(10, 2) NOT NULL,
   precio_alquiler DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
   stock_fisico INT NOT NULL DEFAULT 0,
@@ -175,9 +175,9 @@ CREATE TABLE IF NOT EXISTS libros (
   archivo_digital_url VARCHAR(255) NULL,
   contenido_digital LONGTEXT NULL,
   dias_alquiler INT NOT NULL DEFAULT 15,
-  categoria_id CHAR(36) NULL,
-  autor_id CHAR(36) NULL,
-  editorial_id CHAR(36) NULL,
+  categoria_id INT NULL,
+  autor_id INT NULL,
+  editorial_id INT NULL,
   estado ENUM('DISPONIBLE', 'AGOTADO', 'DESCONTINUADO') NOT NULL DEFAULT 'DISPONIBLE',
   creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -490,39 +490,39 @@ GROUP BY
 -- ==========================================================
 
 INSERT IGNORE INTO roles (id, nombre, descripcion, es_sistema) VALUES
-  ('90000000-0000-4000-8000-000000000001', 'ADMIN', 'Administrador total del sistema con acceso a todos los modulos', 1),
-  ('90000000-0000-4000-8000-000000000002', 'BIBLIOTECARIO', 'Gestion de catalogo, contenido digital, inventario y devoluciones', 1),
-  ('90000000-0000-4000-8000-000000000003', 'SOPORTE_CLIENTE', 'Atencion al cliente, gestion de usuarios y seguimiento de pedidos', 1),
-  ('90000000-0000-4000-8000-000000000004', 'CLIENTE_VIP', 'Cliente con acceso completo de lectura, compra, alquiler y resenas', 0),
-  ('90000000-0000-4000-8000-000000000005', 'CLIENTE', 'Cliente estandar para compra, alquiler y lectura de libros digitales', 1);
+  (1, 'ADMIN', 'Administrador total del sistema con acceso a todos los modulos', 1),
+  (2, 'BIBLIOTECARIO', 'Gestion de catalogo, contenido digital, inventario y devoluciones', 1),
+  (3, 'SOPORTE_CLIENTE', 'Atencion al cliente, gestion de usuarios y seguimiento de pedidos', 1),
+  (4, 'CLIENTE_VIP', 'Cliente con acceso completo de lectura, compra, alquiler y resenas', 0),
+  (5, 'CLIENTE', 'Cliente estandar para compra, alquiler y lectura de libros digitales', 1);
 
 INSERT IGNORE INTO permisos (id, codigo, modulo, nombre, descripcion) VALUES
-  ('91000000-0000-4000-8000-000000000001', 'PANEL_ADMIN_ACCESO', 'Administracion', 'Acceso al panel administrativo', 'Permite ingresar al panel de administracion'),
-  ('91000000-0000-4000-8000-000000000002', 'DASHBOARD_VER', 'Dashboard', 'Ver indicadores y reportes', 'Acceso a graficas, alertas de stock y exportacion CSV'),
-  ('91000000-0000-4000-8000-000000000003', 'CATALOGO_CREAR', 'Catalogo', 'Crear libros', 'Registrar nuevos libros y su contenido digital'),
-  ('91000000-0000-4000-8000-000000000004', 'CATALOGO_EDITAR', 'Catalogo', 'Editar libros', 'Actualizar informacion, stock, portadas y contenido digital'),
-  ('91000000-0000-4000-8000-000000000005', 'CATALOGO_ELIMINAR', 'Catalogo', 'Descontinuar libros', 'Descontinuar libros del catalogo publico'),
-  ('91000000-0000-4000-8000-000000000006', 'PARAMETRIZACION_GESTIONAR', 'Catalogo', 'Gestionar parametrizacion', 'Crear, editar y eliminar categorias, autores, editoriales y formatos'),
-  ('91000000-0000-4000-8000-000000000007', 'USUARIOS_VER', 'Usuarios', 'Ver usuarios', 'Listar y buscar usuarios registrados'),
-  ('91000000-0000-4000-8000-000000000008', 'USUARIOS_EDITAR', 'Usuarios', 'Editar usuarios', 'Actualizar datos, rol y estado de usuarios'),
-  ('91000000-0000-4000-8000-000000000009', 'USUARIOS_RESET_PASSWORD', 'Usuarios', 'Restablecer contrasenas', 'Cambiar contrasena de usuarios desde soporte'),
-  ('91000000-0000-4000-8000-000000000010', 'ROLES_PERMISOS_GESTIONAR', 'Seguridad', 'Gestionar roles y permisos', 'Crear roles y asignar permisos a roles o usuarios'),
-  ('91000000-0000-4000-8000-000000000011', 'PEDIDOS_VER_TODOS', 'Pedidos', 'Ver todos los pedidos', 'Consultar todos los pedidos y facturas de clientes'),
-  ('91000000-0000-4000-8000-000000000012', 'PEDIDOS_CAMBIAR_ESTADO', 'Pedidos', 'Actualizar estado de pedidos', 'Cambiar estado de pedidos y registrar devoluciones'),
-  ('91000000-0000-4000-8000-000000000013', 'INVENTARIO_VER', 'Historial', 'Ver historial de inventario', 'Consultar movimientos de entrada y salida de stock'),
-  ('91000000-0000-4000-8000-000000000014', 'AUDITORIA_VER', 'Historial', 'Ver bitacora de auditoria', 'Consultar registros de seguridad y acciones del sistema'),
-  ('91000000-0000-4000-8000-000000000015', 'COMPRAR_LIBROS', 'Cliente', 'Comprar libros', 'Agregar libros para compra y confirmar pedidos'),
-  ('91000000-0000-4000-8000-000000000016', 'ALQUILAR_LIBROS', 'Cliente', 'Alquilar libros', 'Solicitar alquiler temporal de libros'),
-  ('91000000-0000-4000-8000-000000000017', 'LEER_LIBROS_DIGITALES', 'Cliente', 'Leer libros digitales', 'Visualizar contenido en pantalla de libros comprados o alquilados'),
-  ('91000000-0000-4000-8000-000000000018', 'ESCRIBIR_RESENAS', 'Cliente', 'Publicar resenas', 'Calificar y comentar libros del catalogo');
+  (1, 'PANEL_ADMIN_ACCESO', 'Administracion', 'Acceso al panel administrativo', 'Permite ingresar al panel de administracion'),
+  (2, 'DASHBOARD_VER', 'Dashboard', 'Ver indicadores y reportes', 'Acceso a graficas, alertas de stock y exportacion CSV'),
+  (3, 'CATALOGO_CREAR', 'Catalogo', 'Crear libros', 'Registrar nuevos libros y su contenido digital'),
+  (4, 'CATALOGO_EDITAR', 'Catalogo', 'Editar libros', 'Actualizar informacion, stock, portadas y contenido digital'),
+  (5, 'CATALOGO_ELIMINAR', 'Catalogo', 'Descontinuar libros', 'Descontinuar libros del catalogo publico'),
+  (6, 'PARAMETRIZACION_GESTIONAR', 'Catalogo', 'Gestionar parametrizacion', 'Crear, editar y eliminar categorias, autores, editoriales y formatos'),
+  (7, 'USUARIOS_VER', 'Usuarios', 'Ver usuarios', 'Listar y buscar usuarios registrados'),
+  (8, 'USUARIOS_EDITAR', 'Usuarios', 'Editar usuarios', 'Actualizar datos, rol y estado de usuarios'),
+  (9, 'USUARIOS_RESET_PASSWORD', 'Usuarios', 'Restablecer contrasenas', 'Cambiar contrasena de usuarios desde soporte'),
+  (10, 'ROLES_PERMISOS_GESTIONAR', 'Seguridad', 'Gestionar roles y permisos', 'Crear roles y asignar permisos a roles o usuarios'),
+  (11, 'PEDIDOS_VER_TODOS', 'Pedidos', 'Ver todos los pedidos', 'Consultar todos los pedidos y facturas de clientes'),
+  (12, 'PEDIDOS_CAMBIAR_ESTADO', 'Pedidos', 'Actualizar estado de pedidos', 'Cambiar estado de pedidos y registrar devoluciones'),
+  (13, 'INVENTARIO_VER', 'Historial', 'Ver historial de inventario', 'Consultar movimientos de entrada y salida de stock'),
+  (14, 'AUDITORIA_VER', 'Historial', 'Ver bitacora de auditoria', 'Consultar registros de seguridad y acciones del sistema'),
+  (15, 'COMPRAR_LIBROS', 'Cliente', 'Comprar libros', 'Agregar libros para compra y confirmar pedidos'),
+  (16, 'ALQUILAR_LIBROS', 'Cliente', 'Alquilar libros', 'Solicitar alquiler temporal de libros'),
+  (17, 'LEER_LIBROS_DIGITALES', 'Cliente', 'Leer libros digitales', 'Visualizar contenido en pantalla de libros comprados o alquilados'),
+  (18, 'ESCRIBIR_RESENAS', 'Cliente', 'Publicar resenas', 'Calificar y comentar libros del catalogo');
 
 -- Todos los permisos para ADMIN
 INSERT IGNORE INTO rol_permisos (rol_id, permiso_id)
-SELECT '90000000-0000-4000-8000-000000000001', id FROM permisos;
+SELECT 1, id FROM permisos;
 
 -- Permisos para BIBLIOTECARIO
 INSERT IGNORE INTO rol_permisos (rol_id, permiso_id)
-SELECT '90000000-0000-4000-8000-000000000002', id FROM permisos
+SELECT 2, id FROM permisos
 WHERE codigo IN (
   'PANEL_ADMIN_ACCESO', 'DASHBOARD_VER', 'CATALOGO_CREAR', 'CATALOGO_EDITAR',
   'PARAMETRIZACION_GESTIONAR', 'PEDIDOS_VER_TODOS', 'PEDIDOS_CAMBIAR_ESTADO',
@@ -531,7 +531,7 @@ WHERE codigo IN (
 
 -- Permisos para SOPORTE_CLIENTE
 INSERT IGNORE INTO rol_permisos (rol_id, permiso_id)
-SELECT '90000000-0000-4000-8000-000000000003', id FROM permisos
+SELECT 3, id FROM permisos
 WHERE codigo IN (
   'PANEL_ADMIN_ACCESO', 'USUARIOS_VER', 'USUARIOS_EDITAR',
   'USUARIOS_RESET_PASSWORD', 'PEDIDOS_VER_TODOS', 'PEDIDOS_CAMBIAR_ESTADO'
@@ -539,43 +539,43 @@ WHERE codigo IN (
 
 -- Permisos para CLIENTE y CLIENTE_VIP
 INSERT IGNORE INTO rol_permisos (rol_id, permiso_id)
-SELECT '90000000-0000-4000-8000-000000000004', id FROM permisos
+SELECT 4, id FROM permisos
 WHERE modulo = 'Cliente';
 
 INSERT IGNORE INTO rol_permisos (rol_id, permiso_id)
-SELECT '90000000-0000-4000-8000-000000000005', id FROM permisos
+SELECT 5, id FROM permisos
 WHERE modulo = 'Cliente';
 
 INSERT IGNORE INTO categorias (id, nombre, slug, descripcion) VALUES
-  ('0cef715a-eaed-4037-8207-6daf7d281432', 'Musica', 'musica', 'Libros de contenido musical y artistas'),
-  ('11111111-1111-4111-8111-111111111101', 'Literatura', 'literatura', 'Novelas, cuentos y obras clasicas de la literatura universal'),
-  ('11111111-1111-4111-8111-111111111102', 'Tecnologia', 'tecnologia', 'Programacion, arquitectura de software e ingenieria'),
-  ('11111111-1111-4111-8111-111111111103', 'Historia', 'historia', 'Ensayos historicos, biografias y cronicas'),
-  ('11111111-1111-4111-8111-111111111104', 'Ciencia', 'ciencia', 'Divulgacion cientifica, fisica, matematicas y biologia'),
-  ('11111111-1111-4111-8111-111111111105', 'Negocios', 'negocios', 'Emprendimiento, gestion de proyectos y economia'),
-  ('6a171570-2756-4d40-8145-c2fa6d8eeab8', 'Novela', 'novela', ''),
-  ('ae438f6e-adc4-4eab-b95f-9e64c2fd0fbc', 'Religion', 'religion', 'Libros de contenido espiritual y religioso');
+  (1, 'Literatura', 'literatura', 'Novelas, cuentos y obras clasicas de la literatura universal'),
+  (2, 'Tecnologia', 'tecnologia', 'Programacion, arquitectura de software e ingenieria'),
+  (3, 'Historia', 'historia', 'Ensayos historicos, biografias y cronicas'),
+  (4, 'Ciencia', 'ciencia', 'Divulgacion cientifica, fisica, matematicas y biologia'),
+  (5, 'Negocios', 'negocios', 'Emprendimiento, gestion de proyectos y economia'),
+  (6, 'Musica', 'musica', 'Libros de contenido musical y artistas'),
+  (7, 'Novela', 'novela', 'Novela literaria y psicologica'),
+  (8, 'Religion', 'religion', 'Libros de contenido espiritual y religioso');
 
 INSERT IGNORE INTO autores (id, nombre, nacionalidad, biografia) VALUES
-  ('33333333-3333-4333-8333-333333333301', 'Gabriel Garcia Marquez', 'Colombiana', 'Escritor y periodista colombiano, Premio Nobel de Literatura 1982.'),
-  ('33333333-3333-4333-8333-333333333302', 'Robert C. Martin', 'Estadounidense', 'Ingeniero de software y autor referente en desarrollo agil y codigo limpio.'),
-  ('33333333-3333-4333-8333-333333333303', 'Yuval Noah Harari', 'Israeli', 'Historiador y escritor especializado en historia de la humanidad.'),
-  ('33333333-3333-4333-8333-333333333304', 'Stephen Hawking', 'Britanica', 'Fisico teorico y divulgador cientifico.'),
-  ('33333333-3333-4333-8333-333333333305', 'Eric Ries', 'Estadounidense', 'Emprendedor y autor de la metodologia Lean Startup.'),
-  ('38545906-6d64-489a-807a-dd34648ee81d', 'Fiódor Dostoyevski', 'Ruso', NULL),
-  ('c0ffbf6f-2573-42c4-8462-1a63626bba4f', 'Maria Luisa Piraquive', 'Colombiana', NULL);
+  (1, 'Gabriel Garcia Marquez', 'Colombiana', 'Escritor y periodista colombiano, Premio Nobel de Literatura 1982.'),
+  (2, 'Robert C. Martin', 'Estadounidense', 'Ingeniero de software y autor referente en desarrollo agil y codigo limpio.'),
+  (3, 'Yuval Noah Harari', 'Israeli', 'Historiador y escritor especializado en historia de la humanidad.'),
+  (4, 'Stephen Hawking', 'Britanica', 'Fisico teorico y divulgador cientifico.'),
+  (5, 'Eric Ries', 'Estadounidense', 'Emprendedor y autor de la metodologia Lean Startup.'),
+  (6, 'Fiódor Dostoyevski', 'Ruso', NULL),
+  (7, 'Maria Luisa Piraquive', 'Colombiana', NULL);
 
 INSERT IGNORE INTO editoriales (id, nombre, pais, sitio_web) VALUES
-  ('44444444-4444-4444-8444-444444444401', 'Penguin Random House', 'Espana', 'https://www.penguinrandomhouse.com'),
-  ('44444444-4444-4444-8444-444444444402', 'Prentice Hall', 'Estados Unidos', 'https://www.pearson.com'),
-  ('44444444-4444-4444-8444-444444444403', 'Debate', 'Espana', 'https://www.penguinlibros.com'),
-  ('44444444-4444-4444-8444-444444444404', 'Critica', 'Espana', 'https://www.planetadelibros.com'),
-  ('4a5c2f6c-1233-4ea8-ba05-385da5bee856', 'Papeleria Futuro', 'Colombia', NULL);
+  (1, 'Penguin Random House', 'Espana', 'https://www.penguinrandomhouse.com'),
+  (2, 'Prentice Hall', 'Estados Unidos', 'https://www.pearson.com'),
+  (3, 'Debate', 'Espana', 'https://www.penguinlibros.com'),
+  (4, 'Critica', 'Espana', 'https://www.planetadelibros.com'),
+  (5, 'Papeleria Futuro', 'Colombia', NULL);
 
 INSERT IGNORE INTO formatos (id, codigo, nombre, descripcion, requiere_stock) VALUES
-  ('55555555-5555-4555-8555-555555555501', 'FISICO', 'Fisico', 'Ejemplar impreso con control de inventario fisico', 1),
-  ('55555555-5555-4555-8555-555555555502', 'DIGITAL', 'Digital', 'Libro electronico de entrega inmediata sin stock fisico', 0),
-  ('55555555-5555-4555-8555-555555555503', 'AMBOS', 'Fisico y Digital', 'Disponible tanto en version impresa como digital', 1);
+  (1, 'FISICO', 'Fisico', 'Ejemplar impreso con control de inventario fisico', 1),
+  (2, 'DIGITAL', 'Digital', 'Libro electronico de entrega inmediata sin stock fisico', 0),
+  (3, 'AMBOS', 'Fisico y Digital', 'Disponible tanto en version impresa como digital', 1);
 
 INSERT IGNORE INTO libros (
   id, titulo, isbn, sinopsis, anio_publicacion, idioma, paginas, formato_id,
@@ -587,12 +587,10 @@ INSERT IGNORE INTO libros (
     'Cien anos de soledad',
     '978-0307474728',
     'Obra maestra del realismo magico que narra la historia de la familia Buendia en Macondo.',
-    1967, 'Espanol', 496, '55555555-5555-4555-8555-555555555503',
+    1967, 'Espanol', 496, 3,
     58000.00, 12000.00, 15, 3,
     'https://m.media-amazon.com/images/I/91S1vKWiZWL._SL1500_.jpg',
-    '11111111-1111-4111-8111-111111111101',
-    '33333333-3333-4333-8333-333333333301',
-    '44444444-4444-4444-8444-444444444401',
+    1, 1, 1,
     'DISPONIBLE'
   ),
   (
@@ -600,12 +598,10 @@ INSERT IGNORE INTO libros (
     'Breve historia del tiempo',
     '978-0553380163',
     'Introduccion clara a la cosmologia, el origen del universo y los agujeros negros.',
-    1988, 'Espanol', 256, '55555555-5555-4555-8555-555555555503',
+    1988, 'Espanol', 256, 3,
     64000.00, 14000.00, 7, 2,
     'https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1539358813i/42286901.jpg',
-    '11111111-1111-4111-8111-111111111104',
-    '33333333-3333-4333-8333-333333333304',
-    '44444444-4444-4444-8444-444444444404',
+    4, 4, 4,
     'DISPONIBLE'
   ),
   (
@@ -613,12 +609,10 @@ INSERT IGNORE INTO libros (
     'El metodo Lean Startup',
     '978-8423409495',
     'Guia para crear productos y empresas mediante experimentacion y aprendizaje validado.',
-    2011, 'Espanol', 320, '55555555-5555-4555-8555-555555555502',
+    2011, 'Espanol', 320, 2,
     52000.00, 10000.00, 0, 0,
     'https://m.media-amazon.com/images/I/71lpDUnEbQL._SL1500_.jpg',
-    '11111111-1111-4111-8111-111111111105',
-    '33333333-3333-4333-8333-333333333305',
-    '44444444-4444-4444-8444-444444444401',
+    5, 5, 1,
     'DISPONIBLE'
   ),
   (
@@ -626,12 +620,10 @@ INSERT IGNORE INTO libros (
     'Vivencias',
     '856217-RG',
     'Vivencias, la publicación de la Hermana María Luisa Piraquive en la cual relata desde una perspectiva histórica los inicios de la Iglesia de Dios Ministerial de Jesucristo Internacional, y comparte pasajes de su vida personal y familiar, ahora se encuentra disponible en formato digital para dispositivos Android, iOS, Mac y PC, por medio de la aplicación Kindle.',
-    NULL, 'Espanol', NULL, '55555555-5555-4555-8555-555555555502',
+    NULL, 'Espanol', NULL, 2,
     50000.00, 25000.00, 5, 3,
     'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTaxT-MmXXYS6mkyiAQvWfqVffyijLXTp0z1YxtKkv4OI08lV7wsFUZAwbh&s=10',
-    'ae438f6e-adc4-4eab-b95f-9e64c2fd0fbc',
-    'c0ffbf6f-2573-42c4-8462-1a63626bba4f',
-    '4a5c2f6c-1233-4ea8-ba05-385da5bee856',
+    8, 7, 5,
     'DISPONIBLE'
   ),
   (
@@ -639,12 +631,10 @@ INSERT IGNORE INTO libros (
     'Crimen y castigo',
     '12547-PS',
     '“Crimen y castigo” es una novela psicológica de Fiódor Dostoyevski publicada en 1866, centrada en Rodión Raskólnikov, un estudiante que asesina a una usurera y enfrenta un profundo conflicto moral que lo conduce finalmente a confesar y ser condenado a Siberia.',
-    NULL, 'Espanol', NULL, '55555555-5555-4555-8555-555555555501',
+    NULL, 'Espanol', NULL, 1,
     150000.00, 75000.00, 4, 3,
     'https://assets-global.website-files.com/6034d7d1f3e0f52c50b2adee/6254541d8ae4df16d4e69bc8_6034d7d1f3e0f54529b2b1a1_Crimen-y-castigo-fiodor-dostoyevski-editorial-alma.jpeg',
-    '6a171570-2756-4d40-8145-c2fa6d8eeab8',
-    '38545906-6d64-489a-807a-dd34648ee81d',
-    '44444444-4444-4444-8444-444444444402',
+    7, 6, 2,
     'DISPONIBLE'
   );
 

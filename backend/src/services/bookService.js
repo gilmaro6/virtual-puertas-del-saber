@@ -38,13 +38,13 @@ async function listBooks({ q, categoria, formato, estado, page = 1, limit = 12 }
   }
 
   if (categoria) {
-    conditions.push('(categoria_id = ? OR categoria_slug = ?)');
-    params.push(categoria, categoria);
+    conditions.push('(CAST(categoria_id AS CHAR) = ? OR categoria_slug = ?)');
+    params.push(String(categoria), String(categoria));
   }
 
   if (formato) {
-    conditions.push('(formato_id = ? OR formato = ?)');
-    params.push(formato, formato);
+    conditions.push('(CAST(formato_id AS CHAR) = ? OR formato = ?)');
+    params.push(String(formato), String(formato));
   }
 
   if (estado) {
@@ -207,7 +207,7 @@ async function createBook(data, usuarioId, ipOrigen) {
         anio_publicacion,
         idioma,
         paginas,
-        formato_id,
+        Number(formato_id),
         Number(precio_venta),
         Number(precio_alquiler) || 0,
         stockNum,
@@ -216,9 +216,9 @@ async function createBook(data, usuarioId, ipOrigen) {
         archivo_digital_url,
         contenido_digital || null,
         Math.max(Number(dias_alquiler) || 15, 1),
-        categoria_id || null,
-        autor_id || null,
-        editorial_id || null,
+        categoria_id ? Number(categoria_id) : null,
+        autor_id ? Number(autor_id) : null,
+        editorial_id ? Number(editorial_id) : null,
         estadoInicial
       ]
     );
@@ -289,7 +289,7 @@ async function updateBook(id, data, usuarioId, ipOrigen) {
         data.anio_publicacion !== undefined ? data.anio_publicacion : current.anio_publicacion,
         data.idioma !== undefined ? data.idioma : current.idioma,
         data.paginas !== undefined ? data.paginas : current.paginas,
-        nextFormatoId,
+        Number(nextFormatoId),
         data.precio_venta !== undefined ? Number(data.precio_venta) : current.precio_venta,
         data.precio_alquiler !== undefined ? Number(data.precio_alquiler) : current.precio_alquiler,
         nextStock,
@@ -298,9 +298,9 @@ async function updateBook(id, data, usuarioId, ipOrigen) {
         data.archivo_digital_url !== undefined ? data.archivo_digital_url : current.archivo_digital_url,
         data.contenido_digital !== undefined ? data.contenido_digital : current.contenido_digital,
         data.dias_alquiler !== undefined ? Math.max(Number(data.dias_alquiler) || 15, 1) : current.dias_alquiler,
-        data.categoria_id !== undefined ? (data.categoria_id || null) : current.categoria_id,
-        data.autor_id !== undefined ? (data.autor_id || null) : current.autor_id,
-        data.editorial_id !== undefined ? (data.editorial_id || null) : current.editorial_id,
+        data.categoria_id !== undefined ? (data.categoria_id ? Number(data.categoria_id) : null) : current.categoria_id,
+        data.autor_id !== undefined ? (data.autor_id ? Number(data.autor_id) : null) : current.autor_id,
+        data.editorial_id !== undefined ? (data.editorial_id ? Number(data.editorial_id) : null) : current.editorial_id,
         nextEstado,
         id
       ]
@@ -396,112 +396,115 @@ async function addOrUpdateReview(libroId, usuarioId, { calificacion, comentario 
 async function createCategory({ nombre, descripcion = null }) {
   if (!nombre) throw new AppError('El nombre de la categoria es obligatorio', 400);
   const slug = buildSlug(nombre);
-  const id = uuidv4();
-  await pool.query(
-    'INSERT INTO categorias (id, nombre, slug, descripcion) VALUES (?, ?, ?, ?)',
-    [id, nombre.trim(), slug, descripcion]
+  const [res] = await pool.query(
+    'INSERT INTO categorias (nombre, slug, descripcion) VALUES (?, ?, ?)',
+    [nombre.trim(), slug, descripcion]
   );
-  return { id, nombre: nombre.trim(), slug, descripcion };
+  return { id: res.insertId, nombre: nombre.trim(), slug, descripcion };
 }
 
 async function updateCategory(id, { nombre, descripcion = null }, usuarioId, ipOrigen) {
-  const [rows] = await pool.query('SELECT * FROM categorias WHERE id = ?', [id]);
+  const numericId = Number(id);
+  const [rows] = await pool.query('SELECT * FROM categorias WHERE id = ?', [numericId]);
   if (rows.length === 0) throw new AppError('Categoria no encontrada', 404);
 
-  await ensureNoBooksLinked('categoria_id', id, 'esta categoria');
+  await ensureNoBooksLinked('categoria_id', numericId, 'esta categoria');
 
   if (!nombre) throw new AppError('El nombre de la categoria es obligatorio', 400);
   const slug = buildSlug(nombre);
   await pool.query(
     'UPDATE categorias SET nombre = ?, slug = ?, descripcion = ? WHERE id = ?',
-    [nombre.trim(), slug, descripcion, id]
+    [nombre.trim(), slug, descripcion, numericId]
   );
 
-  await logAudit({ usuarioId, accion: 'ACTUALIZAR_CATEGORIA', entidad: 'categorias', entidadId: id, ipOrigen });
-  return { id, nombre: nombre.trim(), slug, descripcion };
+  await logAudit({ usuarioId, accion: 'ACTUALIZAR_CATEGORIA', entidad: 'categorias', entidadId: numericId, ipOrigen });
+  return { id: numericId, nombre: nombre.trim(), slug, descripcion };
 }
 
 async function deleteCategory(id, usuarioId, ipOrigen) {
-  const [rows] = await pool.query('SELECT id FROM categorias WHERE id = ?', [id]);
+  const numericId = Number(id);
+  const [rows] = await pool.query('SELECT id FROM categorias WHERE id = ?', [numericId]);
   if (rows.length === 0) throw new AppError('Categoria no encontrada', 404);
 
-  await ensureNoBooksLinked('categoria_id', id, 'esta categoria');
-  await pool.query('DELETE FROM categorias WHERE id = ?', [id]);
-  await logAudit({ usuarioId, accion: 'ELIMINAR_CATEGORIA', entidad: 'categorias', entidadId: id, ipOrigen });
+  await ensureNoBooksLinked('categoria_id', numericId, 'esta categoria');
+  await pool.query('DELETE FROM categorias WHERE id = ?', [numericId]);
+  await logAudit({ usuarioId, accion: 'ELIMINAR_CATEGORIA', entidad: 'categorias', entidadId: numericId, ipOrigen });
 }
 
 // --- Parametrizacion: Autores ---
 
 async function createAuthor({ nombre, nacionalidad = null, biografia = null }) {
   if (!nombre) throw new AppError('El nombre del autor es obligatorio', 400);
-  const id = uuidv4();
-  await pool.query(
-    'INSERT INTO autores (id, nombre, nacionalidad, biografia) VALUES (?, ?, ?, ?)',
-    [id, nombre.trim(), nacionalidad, biografia]
+  const [res] = await pool.query(
+    'INSERT INTO autores (nombre, nacionalidad, biografia) VALUES (?, ?, ?)',
+    [nombre.trim(), nacionalidad, biografia]
   );
-  return { id, nombre: nombre.trim(), nacionalidad, biografia };
+  return { id: res.insertId, nombre: nombre.trim(), nacionalidad, biografia };
 }
 
 async function updateAuthor(id, { nombre, nacionalidad = null, biografia = null }, usuarioId, ipOrigen) {
-  const [rows] = await pool.query('SELECT * FROM autores WHERE id = ?', [id]);
+  const numericId = Number(id);
+  const [rows] = await pool.query('SELECT * FROM autores WHERE id = ?', [numericId]);
   if (rows.length === 0) throw new AppError('Autor no encontrado', 404);
 
-  await ensureNoBooksLinked('autor_id', id, 'este autor');
+  await ensureNoBooksLinked('autor_id', numericId, 'este autor');
 
   if (!nombre) throw new AppError('El nombre del autor es obligatorio', 400);
   await pool.query(
     'UPDATE autores SET nombre = ?, nacionalidad = ?, biografia = ? WHERE id = ?',
-    [nombre.trim(), nacionalidad, biografia, id]
+    [nombre.trim(), nacionalidad, biografia, numericId]
   );
 
-  await logAudit({ usuarioId, accion: 'ACTUALIZAR_AUTOR', entidad: 'autores', entidadId: id, ipOrigen });
-  return { id, nombre: nombre.trim(), nacionalidad, biografia };
+  await logAudit({ usuarioId, accion: 'ACTUALIZAR_AUTOR', entidad: 'autores', entidadId: numericId, ipOrigen });
+  return { id: numericId, nombre: nombre.trim(), nacionalidad, biografia };
 }
 
 async function deleteAuthor(id, usuarioId, ipOrigen) {
-  const [rows] = await pool.query('SELECT id FROM autores WHERE id = ?', [id]);
+  const numericId = Number(id);
+  const [rows] = await pool.query('SELECT id FROM autores WHERE id = ?', [numericId]);
   if (rows.length === 0) throw new AppError('Autor no encontrado', 404);
 
-  await ensureNoBooksLinked('autor_id', id, 'este autor');
-  await pool.query('DELETE FROM autores WHERE id = ?', [id]);
-  await logAudit({ usuarioId, accion: 'ELIMINAR_AUTOR', entidad: 'autores', entidadId: id, ipOrigen });
+  await ensureNoBooksLinked('autor_id', numericId, 'este autor');
+  await pool.query('DELETE FROM autores WHERE id = ?', [numericId]);
+  await logAudit({ usuarioId, accion: 'ELIMINAR_AUTOR', entidad: 'autores', entidadId: numericId, ipOrigen });
 }
 
 // --- Parametrizacion: Editoriales ---
 
 async function createPublisher({ nombre, pais = null, sitio_web = null }) {
   if (!nombre) throw new AppError('El nombre de la editorial es obligatorio', 400);
-  const id = uuidv4();
-  await pool.query(
-    'INSERT INTO editoriales (id, nombre, pais, sitio_web) VALUES (?, ?, ?, ?)',
-    [id, nombre.trim(), pais, sitio_web]
+  const [res] = await pool.query(
+    'INSERT INTO editoriales (nombre, pais, sitio_web) VALUES (?, ?, ?)',
+    [nombre.trim(), pais, sitio_web]
   );
-  return { id, nombre: nombre.trim(), pais, sitio_web };
+  return { id: res.insertId, nombre: nombre.trim(), pais, sitio_web };
 }
 
 async function updatePublisher(id, { nombre, pais = null, sitio_web = null }, usuarioId, ipOrigen) {
-  const [rows] = await pool.query('SELECT * FROM editoriales WHERE id = ?', [id]);
+  const numericId = Number(id);
+  const [rows] = await pool.query('SELECT * FROM editoriales WHERE id = ?', [numericId]);
   if (rows.length === 0) throw new AppError('Editorial no encontrada', 404);
 
-  await ensureNoBooksLinked('editorial_id', id, 'esta editorial');
+  await ensureNoBooksLinked('editorial_id', numericId, 'esta editorial');
 
   if (!nombre) throw new AppError('El nombre de la editorial es obligatorio', 400);
   await pool.query(
     'UPDATE editoriales SET nombre = ?, pais = ?, sitio_web = ? WHERE id = ?',
-    [nombre.trim(), pais, sitio_web, id]
+    [nombre.trim(), pais, sitio_web, numericId]
   );
 
-  await logAudit({ usuarioId, accion: 'ACTUALIZAR_EDITORIAL', entidad: 'editoriales', entidadId: id, ipOrigen });
-  return { id, nombre: nombre.trim(), pais, sitio_web };
+  await logAudit({ usuarioId, accion: 'ACTUALIZAR_EDITORIAL', entidad: 'editoriales', entidadId: numericId, ipOrigen });
+  return { id: numericId, nombre: nombre.trim(), pais, sitio_web };
 }
 
 async function deletePublisher(id, usuarioId, ipOrigen) {
-  const [rows] = await pool.query('SELECT id FROM editoriales WHERE id = ?', [id]);
+  const numericId = Number(id);
+  const [rows] = await pool.query('SELECT id FROM editoriales WHERE id = ?', [numericId]);
   if (rows.length === 0) throw new AppError('Editorial no encontrada', 404);
 
-  await ensureNoBooksLinked('editorial_id', id, 'esta editorial');
-  await pool.query('DELETE FROM editoriales WHERE id = ?', [id]);
-  await logAudit({ usuarioId, accion: 'ELIMINAR_EDITORIAL', entidad: 'editoriales', entidadId: id, ipOrigen });
+  await ensureNoBooksLinked('editorial_id', numericId, 'esta editorial');
+  await pool.query('DELETE FROM editoriales WHERE id = ?', [numericId]);
+  await logAudit({ usuarioId, accion: 'ELIMINAR_EDITORIAL', entidad: 'editoriales', entidadId: numericId, ipOrigen });
 }
 
 // --- Parametrizacion: Formatos ---
@@ -511,19 +514,19 @@ async function createFormat({ codigo, nombre, descripcion = null, requiere_stock
     throw new AppError('El codigo y el nombre del formato son obligatorios', 400);
   }
   const cleanCode = codigo.trim().toUpperCase().replace(/\s+/g, '_');
-  const id = uuidv4();
-  await pool.query(
-    'INSERT INTO formatos (id, codigo, nombre, descripcion, requiere_stock) VALUES (?, ?, ?, ?, ?)',
-    [id, cleanCode, nombre.trim(), descripcion, requiere_stock ? 1 : 0]
+  const [res] = await pool.query(
+    'INSERT INTO formatos (codigo, nombre, descripcion, requiere_stock) VALUES (?, ?, ?, ?)',
+    [cleanCode, nombre.trim(), descripcion, requiere_stock ? 1 : 0]
   );
-  return { id, codigo: cleanCode, nombre: nombre.trim(), descripcion, requiere_stock: requiere_stock ? 1 : 0 };
+  return { id: res.insertId, codigo: cleanCode, nombre: nombre.trim(), descripcion, requiere_stock: requiere_stock ? 1 : 0 };
 }
 
 async function updateFormat(id, { codigo, nombre, descripcion = null, requiere_stock = 1 }, usuarioId, ipOrigen) {
-  const [rows] = await pool.query('SELECT * FROM formatos WHERE id = ?', [id]);
+  const numericId = Number(id);
+  const [rows] = await pool.query('SELECT * FROM formatos WHERE id = ?', [numericId]);
   if (rows.length === 0) throw new AppError('Formato no encontrado', 404);
 
-  await ensureNoBooksLinked('formato_id', id, 'este formato');
+  await ensureNoBooksLinked('formato_id', numericId, 'este formato');
 
   if (!codigo || !nombre) {
     throw new AppError('El codigo y el nombre del formato son obligatorios', 400);
@@ -531,20 +534,21 @@ async function updateFormat(id, { codigo, nombre, descripcion = null, requiere_s
   const cleanCode = codigo.trim().toUpperCase().replace(/\s+/g, '_');
   await pool.query(
     'UPDATE formatos SET codigo = ?, nombre = ?, descripcion = ?, requiere_stock = ? WHERE id = ?',
-    [cleanCode, nombre.trim(), descripcion, requiere_stock ? 1 : 0, id]
+    [cleanCode, nombre.trim(), descripcion, requiere_stock ? 1 : 0, numericId]
   );
 
-  await logAudit({ usuarioId, accion: 'ACTUALIZAR_FORMATO', entidad: 'formatos', entidadId: id, ipOrigen });
-  return { id, codigo: cleanCode, nombre: nombre.trim(), descripcion, requiere_stock: requiere_stock ? 1 : 0 };
+  await logAudit({ usuarioId, accion: 'ACTUALIZAR_FORMATO', entidad: 'formatos', entidadId: numericId, ipOrigen });
+  return { id: numericId, codigo: cleanCode, nombre: nombre.trim(), descripcion, requiere_stock: requiere_stock ? 1 : 0 };
 }
 
 async function deleteFormat(id, usuarioId, ipOrigen) {
-  const [rows] = await pool.query('SELECT id FROM formatos WHERE id = ?', [id]);
+  const numericId = Number(id);
+  const [rows] = await pool.query('SELECT id FROM formatos WHERE id = ?', [numericId]);
   if (rows.length === 0) throw new AppError('Formato no encontrado', 404);
 
-  await ensureNoBooksLinked('formato_id', id, 'este formato');
-  await pool.query('DELETE FROM formatos WHERE id = ?', [id]);
-  await logAudit({ usuarioId, accion: 'ELIMINAR_FORMATO', entidad: 'formatos', entidadId: id, ipOrigen });
+  await ensureNoBooksLinked('formato_id', numericId, 'este formato');
+  await pool.query('DELETE FROM formatos WHERE id = ?', [numericId]);
+  await logAudit({ usuarioId, accion: 'ELIMINAR_FORMATO', entidad: 'formatos', entidadId: numericId, ipOrigen });
 }
 
 module.exports = {

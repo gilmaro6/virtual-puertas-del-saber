@@ -190,7 +190,7 @@ function openEditParam(type, id) {
     publishers: cachedMeta.editoriales,
     formats: cachedMeta.formatos
   };
-  const item = (mapList[type] || []).find((x) => x.id === id);
+  const item = (mapList[type] || []).find((x) => String(x.id) === String(id));
   if (!item) return;
 
   if (Number(item.libros_asociados) > 0) {
@@ -468,7 +468,7 @@ async function loadRolesAndPermissions() {
 
   document.getElementById('rolesTableBody').innerHTML = cachedRoles.map((r) => `
     <tr>
-      <td><strong>${r.nombre}</strong><br><small class="text-muted">${r.descripcion || ''}</small></td>
+      <td><span class="badge bg-light text-dark border me-1">#${r.id}</span><strong>${r.nombre}</strong><br><small class="text-muted">${r.descripcion || ''}</small></td>
       <td><span class="badge bg-primary">${r.permisos_codigos.length} permiso(s)</span></td>
       <td>${r.total_usuarios}</td>
       <td>
@@ -498,13 +498,14 @@ document.getElementById('createRoleForm').addEventListener('submit', async (e) =
 });
 
 function openRolePermsModal(roleId) {
-  const role = cachedRoles.find((r) => r.id === roleId);
+  const role = cachedRoles.find((r) => String(r.id) === String(roleId));
   if (!role) return;
   document.getElementById('editRoleId').value = roleId;
   document.getElementById('rolePermsModalTitle').textContent = `Permisos del Rol: ${role.nombre}`;
 
+  const rolePermIds = (role.permisos_ids || []).map(String);
   document.getElementById('rolePermsCheckboxes').innerHTML = cachedAllPermissions.map((p) => {
-    const checked = role.permisos_ids.includes(p.id) ? 'checked' : '';
+    const checked = rolePermIds.includes(String(p.id)) ? 'checked' : '';
     return `
       <div class="col-md-6">
         <label class="border rounded p-2 d-flex align-items-start gap-2 small w-100">

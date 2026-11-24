@@ -1,4 +1,3 @@
-const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/database');
 const AppError = require('../utils/appError');
 const { logAudit } = require('./auditService');
@@ -78,21 +77,22 @@ async function createRole({ nombre, descripcion = null, permisosIds = [] }, admi
     throw new AppError('Ya existe un rol con ese nombre', 409);
   }
 
-  const id = uuidv4();
+  let newRoleId;
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
-    await connection.query(
-      'INSERT INTO roles (id, nombre, descripcion, es_sistema, activo) VALUES (?, ?, ?, 0, 1)',
-      [id, normalizedName, descripcion ? descripcion.trim() : null]
+    const [insertRes] = await connection.query(
+      'INSERT INTO roles (nombre, descripcion, es_sistema, activo) VALUES (?, ?, 0, 1)',
+      [normalizedName, descripcion ? descripcion.trim() : null]
     );
+    newRoleId = insertRes.insertId;
 
     if (Array.isArray(permisosIds) && permisosIds.length > 0) {
       for (const permId of permisosIds) {
         await connection.query(
           'INSERT IGNORE INTO rol_permisos (rol_id, permiso_id) VALUES (?, ?)',
-          [id, permId]
+          [newRoleId, Number(permId)]
         );
       }
     }
@@ -109,31 +109,32 @@ async function createRole({ nombre, descripcion = null, permisosIds = [] }, admi
     usuarioId: adminId,
     accion: 'CREAR_ROL',
     entidad: 'roles',
-    entidadId: id,
+    entidadId: newRoleId,
     detalle: { nombre: normalizedName, total_permisos: permisosIds.length },
     ipOrigen
   });
 
   const roles = await listRoles();
-  return roles.find((r) => r.id === id);
+  return roles.find((r) => Number(r.id) === Number(newRoleId));
 }
 
 async function updateRolePermissions(rolId, permisosIds, adminId, ipOrigen) {
-  const [roles] = await pool.query('SELECT id, nombre FROM roles WHERE id = ?', [rolId]);
+  const numericRoleId = Number(rolId);
+  const [roles] = await pool.query('SELECT id, nombre FROM roles WHERE id = ?', [numericRoleId]);
   if (roles.length === 0) {
     throw new AppError('Rol no encontrado', 404);
   }
 
   const role = roles[0];
-  let finalPerms = Array.isArray(permisosIds) ? [...permisosIds] : [];
+  let finalPerms = Array.isArray(permisosIds) ? permisosIds.map((p) => Number(p)).filter(Boolean) : [];
 
   if (role.nombre === 'ADMIN') {
     const [critical] = await pool.query(
       "SELECT id FROM permisos WHERE codigo IN ('PANEL_ADMIN_ACCESO', 'ROLES_PERMISOS_GESTIONAR')"
     );
     for (const c of critical) {
-      if (!finalPerms.includes(c.id)) {
-        finalPerms.push(c.id);
+      if (!finalPerms.includes(Number(c.id))) {
+        finalPerms.push(Number(c.id));
       }
     }
   }
@@ -141,12 +142,12 @@ async function updateRolePermissions(rolId, permisosIds, adminId, ipOrigen) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    await connection.query('DELETE FROM rol_permisos WHERE rol_id = ?', [rolId]);
+    await connection.query('DELETE FROM rol_permisos WHERE rol_id = ?', [numericRoleId]);
 
     for (const permId of finalPerms) {
       await connection.query(
         'INSERT IGNORE INTO rol_permisos (rol_id, permiso_id) VALUES (?, ?)',
-        [rolId, permId]
+        [numericRoleId, permId]
       );
     }
     await connection.commit();
@@ -161,17 +162,18 @@ async function updateRolePermissions(rolId, permisosIds, adminId, ipOrigen) {
     usuarioId: adminId,
     accion: 'ACTUALIZAR_PERMISOS_ROL',
     entidad: 'roles',
-    entidadId: rolId,
+    entidadId: numericRoleId,
     detalle: { rol: role.nombre, total_permisos: finalPerms.length },
     ipOrigen
   });
 
   const updated = await listRoles();
-  return updated.find((r) => r.id === rolId);
+  return updated.find((r) => Number(r.id) === numericRoleId);
 }
 
 async function deleteRole(rolId, adminId, ipOrigen) {
-  const [roles] = await pool.query('SELECT id, nombre, es_sistema FROM roles WHERE id = ?', [rolId]);
+  const numericRoleId = Number(rolId);
+  const [roles] = await pool.query('SELECT id, nombre, es_sistema FROM roles WHERE id = ?', [numericRoleId]);
   if (roles.length === 0) {
     throw new AppError('Rol no encontrado', 404);
   }
@@ -186,12 +188,12 @@ async function deleteRole(rolId, adminId, ipOrigen) {
     throw new AppError(`No se puede eliminar este rol porque tiene ${users[0].total} usuario(s) asignado(s)`, 409);
   }
 
-  await pool.query('DELETE FROM roles WHERE id = ?', [rolId]);
+  await pool.query('DELETE FROM roles WHERE id = ?', [numericRoleId]);
   await logAudit({
     usuarioId: adminId,
     accion: 'ELIMINAR_ROL',
     entidad: 'roles',
-    entidadId: rolId,
+    entidadId: numericRoleId,
     detalle: { nombre: role.nombre },
     ipOrigen
   });
@@ -258,7 +260,7 @@ async function updateUserPermissions(usuarioId, overrides, adminId, ipOrigen) {
           await connection.query(
             `INSERT INTO usuario_permisos (usuario_id, permiso_id, concedido, asignado_por)
              VALUES (?, ?, ?, ?)`,
-            [usuarioId, item.permiso_id, item.estado === 'CONCEDIDO' ? 1 : 0, adminId]
+            [usuarioId, Number(item.permiso_id), item.estado === 'CONCEDIDO' ? 1 : 0, adminId]
           );
         }
       }
