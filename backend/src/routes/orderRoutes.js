@@ -12,6 +12,7 @@ router.get('/my', orderController.getMyOrders);
 router.get('/rentals/my', orderController.getMyRentals);
 router.get('/library/my', requirePermission('LEER_LIBROS_DIGITALES'), orderController.getMyLibrary);
 router.get('/reader/:bookId', requirePermission('LEER_LIBROS_DIGITALES', 'CATALOGO_EDITAR'), orderController.getBookForReader);
+router.put('/reader/:bookId/progress', requirePermission('LEER_LIBROS_DIGITALES', 'CATALOGO_EDITAR'), orderController.saveReadingProgress);
 router.post('/reader/:bookId/security-event', orderController.logReaderSecurityEvent);
 
 // Rutas de administracion e historial por permisos

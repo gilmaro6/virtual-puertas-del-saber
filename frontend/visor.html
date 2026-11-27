@@ -9,8 +9,56 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Merriweather:wght@400;700&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-  <link href="css/styles.css" rel="stylesheet">
+  <link href="css/styles.css?v=10" rel="stylesheet">
   <style>
+    body.theme-dia {
+      background-color: #f4f7fb;
+      color: #253449;
+    }
+    body.theme-sepia {
+      background-color: #ece0c7;
+      color: #3d2e1c;
+    }
+    body.theme-noche {
+      background-color: #0f141b;
+      color: #e2e8f0;
+    }
+
+    .reader-toolbar {
+      background: #ffffff;
+      border-bottom: 1px solid var(--pds-border);
+      position: sticky;
+      top: 0;
+      z-index: 1020;
+    }
+    body.theme-sepia .reader-toolbar {
+      background: #f6ecd7;
+      border-bottom-color: #dbc8a4;
+    }
+    body.theme-noche .reader-toolbar {
+      background: #17202b;
+      border-bottom-color: #293548;
+      color: #e2e8f0;
+    }
+    body.theme-noche .reader-toolbar .form-select,
+    body.theme-noche .reader-toolbar .btn-outline-secondary {
+      background-color: #1f2a38;
+      color: #e2e8f0;
+      border-color: #334155;
+    }
+
+    .reader-progress-track {
+      height: 4px;
+      background: rgba(20, 45, 78, 0.12);
+      width: 100%;
+    }
+    .reader-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--pds-secondary), var(--pds-accent));
+      width: 0%;
+      transition: width 0.25s ease;
+    }
+
     .protected-reader {
       position: relative;
       max-width: 860px;
@@ -22,11 +70,26 @@
       user-select: none;
       -webkit-user-select: none;
       overflow: hidden;
+      transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
     }
+    body.theme-sepia .protected-reader {
+      background: #fbf4e4;
+      border-color: #dbc8a4;
+      color: #3d2e1c;
+    }
+    body.theme-noche .protected-reader {
+      background: #18212d;
+      border-color: #2a3647;
+      color: #e2e8f0;
+    }
+    body.theme-noche .protected-reader .text-muted {
+      color: #94a3b8 !important;
+    }
+
     .reader-content {
       font-family: 'Merriweather', Georgia, serif;
-      font-size: 1.05rem;
-      line-height: 1.85;
+      font-size: 17px;
+      line-height: 1.88;
       white-space: pre-line;
       position: relative;
       z-index: 1;
@@ -44,7 +107,7 @@
       grid-template-columns: repeat(2, 1fr);
       gap: 3rem;
       padding: 2rem;
-      opacity: 0.12;
+      opacity: 0.11;
       overflow: hidden;
     }
     .watermark-item {
@@ -55,11 +118,18 @@
       text-align: center;
       white-space: nowrap;
     }
+    body.theme-sepia .watermark-item {
+      color: #6c4f2b;
+    }
+    body.theme-noche .watermark-item {
+      color: #93c5fd;
+    }
+
     .focus-shield {
       position: absolute;
       inset: 0;
       z-index: 10;
-      background: rgba(20, 45, 78, 0.88);
+      background: rgba(20, 45, 78, 0.9);
       color: #ffffff;
       display: none;
       flex-direction: column;
@@ -71,6 +141,12 @@
     .reader-blurred .focus-shield {
       display: flex;
     }
+
+    @media (max-width: 767.98px) {
+      .protected-reader {
+        padding: 1.35rem;
+      }
+    }
     @media print {
       body {
         display: none !important;
@@ -78,18 +154,63 @@
     }
   </style>
 </head>
-<body>
+<body class="theme-dia">
   <nav class="navbar navbar-dark navbar-pds shadow-sm">
     <div class="container">
       <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="index.html">
         <img src="assets/images/logo-danzara.jpg" alt="Logo Danzara" class="brand-logo">
         <span><i class="bi bi-arrow-left"></i> Volver a Danzara</span>
       </a>
-      <span class="badge bg-warning text-dark">
-        <i class="bi bi-shield-lock"></i> Lectura Protegida
-      </span>
+      <div class="d-flex align-items-center gap-2">
+        <span class="small text-white-50 d-none d-sm-inline" id="saveProgressStatus"></span>
+        <span class="badge bg-warning text-dark">
+          <i class="bi bi-shield-lock"></i> Lectura Protegida
+        </span>
+      </div>
     </div>
   </nav>
+
+  <!-- Barra de herramientas e-Reader -->
+  <div class="reader-toolbar shadow-sm d-none" id="readerToolbar">
+    <div class="container py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <!-- Navegacion por capitulos -->
+      <div class="d-flex align-items-center gap-1">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="prevChapterBtn" title="Capitulo anterior">
+          <i class="bi bi-chevron-left"></i>
+        </button>
+        <select class="form-select form-select-sm" id="chapterSelect" style="max-width: 220px;"></select>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="nextChapterBtn" title="Siguiente capitulo">
+          <i class="bi bi-chevron-right"></i>
+        </button>
+      </div>
+
+      <!-- Controles de tema y tamano de fuente -->
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Modo de lectura">
+          <button type="button" class="btn btn-outline-secondary theme-btn" data-theme="DIA" title="Modo Dia">
+            <i class="bi bi-sun"></i> Dia
+          </button>
+          <button type="button" class="btn btn-outline-secondary theme-btn" data-theme="SEPIA" title="Modo Sepia">
+            <i class="bi bi-book"></i> Sepia
+          </button>
+          <button type="button" class="btn btn-outline-secondary theme-btn" data-theme="NOCHE" title="Modo Noche">
+            <i class="bi bi-moon-stars"></i> Noche
+          </button>
+        </div>
+
+        <div class="btn-group btn-group-sm" role="group" aria-label="Tamano de texto">
+          <button type="button" class="btn btn-outline-secondary" id="fontDecBtn" title="Reducir letra">A-</button>
+          <span class="btn btn-outline-secondary disabled px-2" id="fontSizeLabel">17px</span>
+          <button type="button" class="btn btn-outline-secondary" id="fontIncBtn" title="Aumentar letra">A+</button>
+        </div>
+
+        <span class="badge bg-primary" id="progressPercentLabel">0%</span>
+      </div>
+    </div>
+    <div class="reader-progress-track">
+      <div class="reader-progress-fill" id="readingProgressBar"></div>
+    </div>
+  </div>
 
   <main class="container my-3">
     <div id="readerAlert"></div>
@@ -106,7 +227,8 @@
     </div>
   </main>
 
-  <script src="js/api.js?v=6"></script>
-  <script src="js/visor.js?v=6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/api.js?v=10"></script>
+  <script src="js/visor.js?v=10"></script>
 </body>
 </html>

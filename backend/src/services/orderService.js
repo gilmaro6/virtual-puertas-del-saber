@@ -607,26 +607,32 @@ async function getMyLibrary(usuarioId) {
   const [purchased] = await pool.query(
     `SELECT DISTINCT l.id AS libro_id, l.titulo, l.portada_url, a.nombre AS autor_nombre,
             'COMPRA' AS tipo_acceso, NULL AS fecha_vencimiento, 'ACTIVO' AS estado_acceso,
-            (l.contenido_digital IS NOT NULL AND CHAR_LENGTH(l.contenido_digital) > 0) AS tiene_contenido_digital
+            (l.contenido_digital IS NOT NULL AND CHAR_LENGTH(l.contenido_digital) > 0) AS tiene_contenido_digital,
+            COALESCE(pl.porcentaje, 0) AS progreso_porcentaje,
+            COALESCE(pl.capitulo_actual, 0) AS capitulo_actual
      FROM detalle_pedidos dp
      INNER JOIN pedidos p ON dp.pedido_id = p.id
      INNER JOIN libros l ON dp.libro_id = l.id
      LEFT JOIN autores a ON l.autor_id = a.id
+     LEFT JOIN progreso_lectura pl ON pl.usuario_id = ? AND pl.libro_id = l.id
      WHERE p.usuario_id = ? AND dp.tipo_operacion = 'COMPRA' AND p.estado != 'CANCELADO'`,
-    [usuarioId]
+    [usuarioId, usuarioId]
   );
 
   const [rented] = await pool.query(
     `SELECT pa.libro_id, l.titulo, l.portada_url, a.nombre AS autor_nombre,
             'ALQUILER' AS tipo_acceso, pa.fecha_vencimiento,
             CASE WHEN pa.fecha_vencimiento >= NOW() AND pa.estado = 'ACTIVO' THEN 'ACTIVO' ELSE 'VENCIDO' END AS estado_acceso,
-            (l.contenido_digital IS NOT NULL AND CHAR_LENGTH(l.contenido_digital) > 0) AS tiene_contenido_digital
+            (l.contenido_digital IS NOT NULL AND CHAR_LENGTH(l.contenido_digital) > 0) AS tiene_contenido_digital,
+            COALESCE(pl.porcentaje, 0) AS progreso_porcentaje,
+            COALESCE(pl.capitulo_actual, 0) AS capitulo_actual
      FROM prestamos_alquileres pa
      INNER JOIN libros l ON pa.libro_id = l.id
      LEFT JOIN autores a ON l.autor_id = a.id
+     LEFT JOIN progreso_lectura pl ON pl.usuario_id = ? AND pl.libro_id = l.id
      WHERE pa.usuario_id = ?
      ORDER BY pa.fecha_inicio DESC`,
-    [usuarioId]
+    [usuarioId, usuarioId]
   );
 
   return [...purchased, ...rented];
@@ -694,13 +700,65 @@ async function getBookForReader(bookId, user, ipOrigen) {
     ipOrigen
   });
 
+  const [progressRows] = await pool.query(
+    'SELECT capitulo_actual, porcentaje, tema, tamano_fuente, actualizado_en FROM progreso_lectura WHERE usuario_id = ? AND libro_id = ?',
+    [user.id, bookId]
+  );
+  const progreso = progressRows.length > 0
+    ? {
+        capitulo_actual: Number(progressRows[0].capitulo_actual) || 0,
+        porcentaje: Number(progressRows[0].porcentaje) || 0,
+        tema: progressRows[0].tema || 'DIA',
+        tamano_fuente: Number(progressRows[0].tamano_fuente) || 17,
+        actualizado_en: progressRows[0].actualizado_en
+      }
+    : {
+        capitulo_actual: 0,
+        porcentaje: 0,
+        tema: 'DIA',
+        tamano_fuente: 17,
+        actualizado_en: null
+      };
+
   return {
     libro: book,
     acceso: { tipo: accessType, fecha_vencimiento: expiresAt },
     lector: {
       nombre: `${user.nombre} ${user.apellido}`.trim(),
       email: user.email
-    }
+    },
+    progreso
+  };
+}
+
+async function saveReadingProgress(bookId, usuarioId, { capitulo_actual = 0, porcentaje = 0, tema = 'DIA', tamano_fuente = 17 }) {
+  const validThemes = ['DIA', 'SEPIA', 'NOCHE'];
+  const safeTema = validThemes.includes(String(tema).toUpperCase()) ? String(tema).toUpperCase() : 'DIA';
+  const safeCapitulo = Math.max(Math.floor(Number(capitulo_actual) || 0), 0);
+  const safePorcentaje = Math.min(Math.max(Number(porcentaje) || 0, 0), 100);
+  const safeFuente = Math.min(Math.max(Math.floor(Number(tamano_fuente) || 17), 14), 26);
+
+  const [books] = await pool.query('SELECT id FROM libros WHERE id = ?', [bookId]);
+  if (books.length === 0) {
+    throw new AppError('Libro no encontrado', 404);
+  }
+
+  await pool.query(
+    `INSERT INTO progreso_lectura (usuario_id, libro_id, capitulo_actual, porcentaje, tema, tamano_fuente)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       capitulo_actual = VALUES(capitulo_actual),
+       porcentaje = VALUES(porcentaje),
+       tema = VALUES(tema),
+       tamano_fuente = VALUES(tamano_fuente)`,
+    [usuarioId, bookId, safeCapitulo, safePorcentaje, safeTema, safeFuente]
+  );
+
+  return {
+    capitulo_actual: safeCapitulo,
+    porcentaje: safePorcentaje,
+    tema: safeTema,
+    tamano_fuente: safeFuente
   };
 }
 
@@ -722,6 +780,7 @@ module.exports = {
   getMyRentals,
   getMyLibrary,
   getBookForReader,
+  saveReadingProgress,
   logReaderSecurityEvent,
   getOrderById,
   getOrderInvoice,

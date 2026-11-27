@@ -117,6 +117,15 @@ async function getBookForReader(req, res, next) {
   }
 }
 
+async function saveReadingProgress(req, res, next) {
+  try {
+    const data = await orderService.saveReadingProgress(req.params.bookId, req.user.id, req.body);
+    res.status(200).json({ status: 'ok', data });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function logReaderSecurityEvent(req, res, next) {
   try {
     await orderService.logReaderSecurityEvent(req.params.bookId, req.user.id, req.body.evento, req.ip);
@@ -132,6 +141,7 @@ module.exports = {
   getMyRentals,
   getMyLibrary,
   getBookForReader,
+  saveReadingProgress,
   logReaderSecurityEvent,
   getOrderById,
   getOrderInvoice,

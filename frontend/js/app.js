@@ -942,24 +942,40 @@ document.getElementById('openLibraryBtn').addEventListener('click', async (e) =>
 
     body.innerHTML = `
       <div class="row g-3">
-        ${items.map((item) => `
+        ${items.map((item) => {
+          const pct = Math.min(Math.max(Math.round(Number(item.progreso_porcentaje) || 0), 0), 100);
+          return `
           <div class="col-md-6">
             <div class="card border h-100">
-              <div class="card-body d-flex justify-content-between align-items-center gap-2">
-                <div>
-                  <h6 class="fw-bold mb-1">${item.titulo}</h6>
-                  <span class="badge bg-${item.tipo_acceso === 'COMPRA' ? 'primary' : 'info text-dark'}">${item.tipo_acceso}</span>
-                  <span class="badge bg-${item.estado_acceso === 'ACTIVO' ? 'success' : 'secondary'}">${item.estado_acceso}</span>
-                  ${item.fecha_vencimiento ? `<div class="small text-muted mt-1">Vence: ${formatDate(item.fecha_vencimiento)}</div>` : ''}
+              <div class="card-body d-flex flex-column justify-content-between gap-2">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <h6 class="fw-bold mb-1">${item.titulo}</h6>
+                    <span class="badge bg-${item.tipo_acceso === 'COMPRA' ? 'primary' : 'info text-dark'}">${item.tipo_acceso}</span>
+                    <span class="badge bg-${item.estado_acceso === 'ACTIVO' ? 'success' : 'secondary'}">${item.estado_acceso}</span>
+                    ${item.fecha_vencimiento ? `<div class="small text-muted mt-1">Vence: ${formatDate(item.fecha_vencimiento)}</div>` : ''}
+                  </div>
+                  ${item.estado_acceso === 'ACTIVO' && item.tiene_contenido_digital
+                    ? `<a href="visor.html?bookId=${item.libro_id}" class="btn btn-pds btn-sm text-nowrap"><i class="bi bi-book-half"></i> ${pct > 0 ? 'Continuar' : 'Leer'}</a>`
+                    : '<span class="small text-muted">No disponible</span>'
+                  }
                 </div>
-                ${item.estado_acceso === 'ACTIVO' && item.tiene_contenido_digital
-                  ? `<a href="visor.html?bookId=${item.libro_id}" class="btn btn-pds btn-sm"><i class="bi bi-book-half"></i> Leer</a>`
-                  : '<span class="small text-muted">No disponible</span>'
-                }
+                ${item.tiene_contenido_digital ? `
+                  <div>
+                    <div class="d-flex justify-content-between small text-muted mb-1">
+                      <span>Progreso de lectura</span>
+                      <span class="fw-semibold">${pct}%</span>
+                    </div>
+                    <div class="progress" style="height: 6px;">
+                      <div class="progress-bar" role="progressbar" style="width: ${pct}%; background-color: var(--pds-secondary);"></div>
+                    </div>
+                  </div>
+                ` : ''}
               </div>
             </div>
           </div>
-        `).join('')}
+        `;
+        }).join('')}
       </div>
     `;
   } catch (error) {

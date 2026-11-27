@@ -244,6 +244,26 @@ CREATE TABLE IF NOT EXISTS favoritos (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS progreso_lectura (
+  usuario_id CHAR(36) NOT NULL,
+  libro_id CHAR(36) NOT NULL,
+  capitulo_actual INT NOT NULL DEFAULT 0,
+  porcentaje DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+  tema ENUM('DIA', 'SEPIA', 'NOCHE') NOT NULL DEFAULT 'DIA',
+  tamano_fuente TINYINT NOT NULL DEFAULT 17,
+  actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (usuario_id, libro_id),
+  KEY idx_progreso_libro (libro_id),
+  CONSTRAINT fk_progreso_usuario
+    FOREIGN KEY (usuario_id) REFERENCES usuarios (id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT fk_progreso_libro
+    FOREIGN KEY (libro_id) REFERENCES libros (id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ==========================================================
 -- 3. MODULO DE CARRITO, COMPRAS, ALQUILERES Y PAGOS
 -- ==========================================================
