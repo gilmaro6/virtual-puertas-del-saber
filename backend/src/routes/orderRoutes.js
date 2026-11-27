@@ -17,6 +17,7 @@ router.post('/reader/:bookId/security-event', orderController.logReaderSecurityE
 // Rutas de administracion e historial por permisos
 router.get('/history/inventory', requirePermission('INVENTARIO_VER'), orderController.getInventoryHistory);
 router.get('/history/audit', requirePermission('AUDITORIA_VER'), orderController.getAuditHistory);
+router.get('/rentals', requirePermission('PEDIDOS_VER_TODOS'), orderController.listAllRentals);
 router.get('/', requirePermission('PEDIDOS_VER_TODOS'), orderController.listAllOrders);
 router.patch('/:id/status', requirePermission('PEDIDOS_CAMBIAR_ESTADO'), orderController.updateOrderStatus);
 router.patch('/rentals/:rentalId/return', requirePermission('PEDIDOS_CAMBIAR_ESTADO'), orderController.returnRental);

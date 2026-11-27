@@ -45,6 +45,15 @@ async function listAllOrders(req, res, next) {
   }
 }
 
+async function listAllRentals(req, res, next) {
+  try {
+    const rentals = await orderService.listAllRentals(req.query);
+    res.status(200).json({ status: 'ok', data: rentals });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function updateOrderStatus(req, res, next) {
   try {
     const order = await orderService.updateOrderStatus(req.params.id, req.body, req.user.id, req.ip);
@@ -127,6 +136,7 @@ module.exports = {
   getOrderById,
   getOrderInvoice,
   listAllOrders,
+  listAllRentals,
   updateOrderStatus,
   returnRental,
   getInventoryHistory,

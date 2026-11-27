@@ -11,9 +11,10 @@ npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 
-# Persistencia local de base de datos Docker
+# Persistencia local de base de datos Docker y archivos subidos
 mysql_data/
 backend/database/backup_*.sql
+backend/uploads/
 
 # Archivos del Sistema Operativo
 .DS_Store

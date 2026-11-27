@@ -202,6 +202,15 @@ async function deleteFormat(req, res, next) {
   }
 }
 
+async function uploadCover(req, res, next) {
+  try {
+    const result = await bookService.saveUploadedCover(req.body, req.user.id, req.ip);
+    res.status(201).json({ status: 'ok', message: 'Portada cargada correctamente', data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   listBooks,
   getBookById,
@@ -213,6 +222,7 @@ module.exports = {
   addOrUpdateReview,
   getMyFavorites,
   toggleFavorite,
+  uploadCover,
   createCategory,
   updateCategory,
   deleteCategory,

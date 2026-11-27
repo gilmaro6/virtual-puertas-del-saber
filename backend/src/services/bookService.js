@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/database');
 const AppError = require('../utils/appError');
@@ -592,6 +594,43 @@ async function deleteFormat(id, usuarioId, ipOrigen) {
   await logAudit({ usuarioId, accion: 'ELIMINAR_FORMATO', entidad: 'formatos', entidadId: numericId, ipOrigen });
 }
 
+async function saveUploadedCover({ dataUrl }, usuarioId, ipOrigen) {
+  if (!dataUrl || typeof dataUrl !== 'string') {
+    throw new AppError('Debes seleccionar una imagen valida', 400);
+  }
+
+  const match = dataUrl.match(/^data:image\/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) {
+    throw new AppError('Formato de imagen no permitido. Usa JPG, PNG o WEBP', 400);
+  }
+
+  const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
+  const buffer = Buffer.from(match[2], 'base64');
+
+  if (buffer.length > 2 * 1024 * 1024) {
+    throw new AppError('La imagen supera el tamano maximo permitido de 2 MB', 400);
+  }
+
+  const coversDir = path.resolve(__dirname, '../../uploads/covers');
+  fs.mkdirSync(coversDir, { recursive: true });
+
+  const fileName = `${uuidv4()}.${ext}`;
+  const fullPath = path.join(coversDir, fileName);
+  fs.writeFileSync(fullPath, buffer);
+
+  const publicUrl = `/uploads/covers/${fileName}`;
+
+  await logAudit({
+    usuarioId,
+    accion: 'SUBIR_PORTADA',
+    entidad: 'libros',
+    detalle: { url: publicUrl, bytes: buffer.length },
+    ipOrigen
+  });
+
+  return { url: publicUrl };
+}
+
 module.exports = {
   listBooks,
   getBookById,
@@ -603,6 +642,7 @@ module.exports = {
   addOrUpdateReview,
   getMyFavorites,
   toggleFavorite,
+  saveUploadedCover,
   createCategory,
   updateCategory,
   deleteCategory,

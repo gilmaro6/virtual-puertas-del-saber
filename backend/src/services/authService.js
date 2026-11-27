@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
@@ -268,6 +269,101 @@ async function updateProfile(usuarioId, { nombre, apellido, telefono, passwordAc
   return getProfile(usuarioId);
 }
 
+async function requestPasswordReset({ email, captchaToken, captchaAnswer }, ipOrigen) {
+  verifyCaptcha(captchaToken, captchaAnswer);
+
+  if (!email || !email.trim()) {
+    throw new AppError('Ingresa tu correo electronico', 400);
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const [rows] = await pool.query('SELECT id, email, estado FROM usuarios WHERE email = ?', [normalizedEmail]);
+  if (rows.length === 0) {
+    throw new AppError('No encontramos una cuenta asociada a ese correo electronico', 404);
+  }
+
+  const user = rows[0];
+  if (user.estado === 'INACTIVO') {
+    throw new AppError('La cuenta se encuentra inactiva. Contacta al administrador.', 403);
+  }
+
+  const code = String(crypto.randomInt(100000, 999999));
+  const tokenHash = crypto.createHash('sha256').update(code).digest('hex');
+
+  await pool.query(
+    "UPDATE tokens_sesion SET usado = 1 WHERE usuario_id = ? AND tipo = 'RECUPERACION' AND usado = 0",
+    [user.id]
+  );
+
+  await pool.query(
+    `INSERT INTO tokens_sesion (id, usuario_id, token_hash, tipo, expira_en, usado, ip_origen)
+     VALUES (?, ?, ?, 'RECUPERACION', DATE_ADD(NOW(), INTERVAL 15 MINUTE), 0, ?)`,
+    [uuidv4(), user.id, tokenHash, ipOrigen]
+  );
+
+  await logAudit({
+    usuarioId: user.id,
+    accion: 'SOLICITAR_RECUPERACION_PASSWORD',
+    entidad: 'tokens_sesion',
+    entidadId: user.id,
+    detalle: { email: user.email },
+    ipOrigen
+  });
+
+  return {
+    email: user.email,
+    expira_minutos: 15,
+    codigo_demo: code
+  };
+}
+
+async function resetPasswordWithCode({ email, codigo, nuevaContrasena }, ipOrigen) {
+  if (!email || !codigo || !nuevaContrasena) {
+    throw new AppError('Correo, codigo de verificacion y nueva contrasena son obligatorios', 400);
+  }
+
+  if (String(nuevaContrasena).length < 6) {
+    throw new AppError('La nueva contrasena debe tener al menos 6 caracteres', 400);
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const [users] = await pool.query('SELECT id, email FROM usuarios WHERE email = ?', [normalizedEmail]);
+  if (users.length === 0) {
+    throw new AppError('Datos de recuperacion invalidos', 400);
+  }
+
+  const user = users[0];
+  const tokenHash = crypto.createHash('sha256').update(String(codigo).trim()).digest('hex');
+
+  const [tokens] = await pool.query(
+    `SELECT id FROM tokens_sesion
+     WHERE usuario_id = ? AND tipo = 'RECUPERACION' AND token_hash = ? AND usado = 0 AND expira_en > NOW()
+     ORDER BY creado_en DESC LIMIT 1`,
+    [user.id, tokenHash]
+  );
+
+  if (tokens.length === 0) {
+    throw new AppError('El codigo de recuperacion es invalido o ha expirado', 400);
+  }
+
+  const passwordHash = await bcrypt.hash(nuevaContrasena, 10);
+
+  await pool.query(
+    "UPDATE usuarios SET password_hash = ?, intentos_fallidos = 0, estado = 'ACTIVO' WHERE id = ?",
+    [passwordHash, user.id]
+  );
+  await pool.query('UPDATE tokens_sesion SET usado = 1 WHERE id = ?', [tokens[0].id]);
+
+  await logAudit({
+    usuarioId: user.id,
+    accion: 'RESTABLECER_PASSWORD_TOKEN',
+    entidad: 'usuarios',
+    entidadId: user.id,
+    detalle: { email: user.email },
+    ipOrigen
+  });
+}
+
 async function logout(usuarioId, ipOrigen) {
   await logAudit({
     usuarioId,
@@ -284,5 +380,7 @@ module.exports = {
   login,
   getProfile,
   updateProfile,
+  requestPasswordReset,
+  resetPasswordWithCode,
   logout
 };

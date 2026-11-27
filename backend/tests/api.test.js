@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { requirePermission } = require('../src/middlewares/authMiddleware');
 const { validatePaymentDetails } = require('../src/services/orderService');
 const { generateCaptcha } = require('../src/services/authService');
+const { calculateCouponDiscount } = require('../src/services/couponService');
 
 test('requirePermission permite acceso cuando el usuario tiene el permiso', () => {
   const middleware = requirePermission('DASHBOARD_VER');
@@ -63,4 +64,41 @@ test('generateCaptcha genera pregunta y token JWT', () => {
   const captcha = generateCaptcha();
   assert.ok(captcha.question.includes('?'));
   assert.ok(captcha.captchaToken.split('.').length === 3);
+});
+
+test('calculateCouponDiscount aplica descuento porcentual correctamente', () => {
+  const coupon = {
+    codigo: 'DANZARA10',
+    tipo: 'PORCENTAJE',
+    valor: 10,
+    monto_minimo: 30000,
+    usos_maximos: 100,
+    usos_actuales: 1,
+    fecha_expiracion: null,
+    activo: 1
+  };
+  const res = calculateCouponDiscount(coupon, 50000);
+  assert.equal(res.descuento, 5000);
+  assert.equal(res.total_con_descuento, 45000);
+});
+
+test('calculateCouponDiscount rechaza cupon cuando no alcanza monto minimo o esta vencido', () => {
+  const minCoupon = {
+    codigo: 'MIN50',
+    tipo: 'MONTO_FIJO',
+    valor: 10000,
+    monto_minimo: 60000,
+    usos_maximos: null,
+    usos_actuales: 0,
+    fecha_expiracion: null,
+    activo: 1
+  };
+  assert.throws(() => calculateCouponDiscount(minCoupon, 40000), (err) => err.statusCode === 400);
+
+  const expiredCoupon = {
+    ...minCoupon,
+    monto_minimo: 0,
+    fecha_expiracion: '2020-01-01T00:00:00.000Z'
+  };
+  assert.throws(() => calculateCouponDiscount(expiredCoupon, 40000), (err) => err.statusCode === 400);
 });

@@ -418,3 +418,89 @@ a:hover {
     display: block;
   }
 }
+
+/* Linea de tiempo y seguimiento de pedidos */
+.order-stepper {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+  gap: 0.25rem;
+}
+
+.order-stepper::before {
+  content: '';
+  position: absolute;
+  top: 15px;
+  left: 8%;
+  right: 8%;
+  height: 2px;
+  background-color: var(--pds-border);
+  z-index: 0;
+}
+
+.order-step {
+  flex: 1;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.order-step-dot {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  margin: 0 auto 0.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--pds-surface);
+  border: 2px solid var(--pds-border);
+  color: var(--pds-muted);
+  font-size: 0.85rem;
+}
+
+.order-step.done .order-step-dot {
+  background-color: var(--pds-primary);
+  border-color: var(--pds-primary);
+  color: #ffffff;
+}
+
+.order-step.current .order-step-dot {
+  background-color: var(--pds-secondary);
+  border-color: var(--pds-accent);
+  box-shadow: 0 0 0 3px rgba(244, 185, 66, 0.35);
+}
+
+.order-step-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--pds-muted);
+}
+
+.order-step.done .order-step-label {
+  color: var(--pds-primary);
+  font-weight: 600;
+}
+
+.order-timeline {
+  border-left: 2px solid var(--pds-secondary);
+  padding-left: 1rem;
+  margin-left: 0.45rem;
+}
+
+.timeline-item {
+  position: relative;
+  padding-bottom: 0.85rem;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -1.38rem;
+  top: 0.3rem;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--pds-accent);
+  border: 2px solid var(--pds-primary);
+}

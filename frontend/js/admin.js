@@ -3,6 +3,8 @@ let cachedUsers = [];
 let cachedRoles = [];
 let cachedAllPermissions = [];
 let cachedMeta = { categorias: [], autores: [], editoriales: [], formatos: [] };
+let cachedRentals = [];
+let cachedCoupons = [];
 let salesChartInstance = null;
 let categoryChartInstance = null;
 let bookSearchTimer = null;
@@ -431,7 +433,7 @@ async function loadAdminBooks(q = '') {
     <tr>
       <td>
         ${b.portada_url
-          ? `<img src="${b.portada_url}" alt="${b.titulo}" class="book-thumb">`
+          ? `<img src="${resolveAssetUrl(b.portada_url)}" alt="${b.titulo}" class="book-thumb">`
           : '<span class="badge bg-light text-secondary border">Sin img</span>'
         }
       </td>
@@ -464,7 +466,7 @@ document.getElementById('adminBookSearch').addEventListener('input', (e) => {
 function updateCoverPreview(url) {
   const preview = document.getElementById('bookCoverPreview');
   if (url && url.trim()) {
-    preview.src = url.trim();
+    preview.src = resolveAssetUrl(url.trim());
     preview.classList.remove('d-none');
   } else {
     preview.src = '';
@@ -474,11 +476,47 @@ function updateCoverPreview(url) {
 
 document.getElementById('bookPortadaUrl').addEventListener('input', (e) => updateCoverPreview(e.target.value));
 
+document.getElementById('bookPortadaFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const statusEl = document.getElementById('coverUploadStatus');
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    statusEl.innerHTML = '<span class="text-danger">Solo se permiten imagenes JPG, PNG o WEBP.</span>';
+    e.target.value = '';
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    statusEl.innerHTML = '<span class="text-danger">La imagen supera el limite de 2 MB.</span>';
+    e.target.value = '';
+    return;
+  }
+
+  statusEl.innerHTML = '<span class="text-primary">Subiendo portada...</span>';
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const res = await apiRequest('/books/upload-cover', {
+        method: 'POST',
+        body: JSON.stringify({ dataUrl: reader.result })
+      });
+      document.getElementById('bookPortadaUrl').value = res.data.url;
+      updateCoverPreview(res.data.url);
+      statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> Portada cargada en el servidor.</span>';
+    } catch (error) {
+      statusEl.innerHTML = `<span class="text-danger">${error.message}</span>`;
+    }
+  };
+  reader.readAsDataURL(file);
+});
+
 function prepareNewBook() {
   document.getElementById('bookModalTitle').textContent = 'Registrar Libro';
   document.getElementById('bookForm').reset();
   document.getElementById('bookId').value = '';
   document.getElementById('bookDiasAlquiler').value = 15;
+  document.getElementById('bookPortadaFile').value = '';
+  document.getElementById('coverUploadStatus').textContent = 'Formatos permitidos: JPG, PNG o WEBP (max. 2 MB).';
   updateCoverPreview('');
 }
 
@@ -855,9 +893,14 @@ async function loadAdminOrders(estado = '') {
       <td>${formatCurrency(o.total)}</td>
       <td><span class="badge bg-primary">${o.estado}</span></td>
       <td>
-        <a href="factura.html?orderId=${o.id}" target="_blank" class="btn btn-sm btn-outline-primary">
-          <i class="bi bi-receipt"></i> ${o.numero_factura || 'Ver'}
-        </a>
+        <div class="d-flex gap-1">
+          <a href="factura.html?orderId=${o.id}" target="_blank" class="btn btn-sm btn-outline-primary" title="Ver factura">
+            <i class="bi bi-receipt"></i> ${o.numero_factura || 'Ver'}
+          </a>
+          <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openAdminOrderTimeline('${o.id}')" title="Ver seguimiento">
+            <i class="bi bi-clock-history"></i>
+          </button>
+        </div>
       </td>
       <td>
         <select class="form-select form-select-sm" onchange="changeOrderStatus('${o.id}', this.value)">
@@ -883,6 +926,202 @@ async function changeOrderStatus(orderId, estado) {
     await loadAuditHistory();
     await loadDashboard();
   } catch (error) { showAdminAlert(error.message, 'danger'); }
+}
+
+async function openAdminOrderTimeline(orderId) {
+  const body = document.getElementById('orderTimelineBody');
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('orderTimelineModal'));
+  body.innerHTML = '<p class="text-muted">Cargando historial del pedido...</p>';
+  modal.show();
+  try {
+    const res = await apiRequest(`/orders/${orderId}`);
+    body.innerHTML = renderOrderTimelineHtml(res.data);
+  } catch (error) {
+    body.innerHTML = `<div class="alert alert-danger mb-0">${error.message}</div>`;
+  }
+}
+
+// --- Alquileres y Devoluciones ---
+
+async function loadAdminRentals(estado = '') {
+  if (!hasPerm('PEDIDOS_VER_TODOS')) return;
+  const query = estado ? `?estado=${encodeURIComponent(estado)}` : '';
+  const res = await apiRequest(`/orders/rentals${query}`);
+  cachedRentals = res.data || [];
+  const tbody = document.getElementById('adminRentalsTable');
+
+  if (cachedRentals.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No hay alquileres registrados para este filtro.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = cachedRentals.map((r) => {
+    const badgeColor = r.estado_efectivo === 'DEVUELTO'
+      ? 'secondary'
+      : r.estado_efectivo === 'VENCIDO'
+        ? 'danger'
+        : 'success';
+    const multaMostrar = r.estado === 'DEVUELTO' ? Number(r.multa) : Number(r.multa_sugerida);
+    return `
+      <tr>
+        <td>
+          <div class="fw-semibold">${r.libro_titulo}</div>
+          <span class="badge bg-light text-dark border">${r.formato}</span>
+        </td>
+        <td>${r.cliente_nombre} ${r.cliente_apellido}<br><small class="text-muted">${r.cliente_email}</small></td>
+        <td class="small">${r.numero_orden || '-'}</td>
+        <td class="small">
+          <div>Ini: ${formatDate(r.fecha_inicio)}</div>
+          <div>Ven: <strong>${formatDate(r.fecha_vencimiento)}</strong></div>
+        </td>
+        <td><span class="badge bg-${badgeColor}">${r.estado_efectivo}</span></td>
+        <td class="small">
+          ${r.dias_mora > 0
+            ? `<span class="text-danger fw-semibold">${r.dias_mora} dia(s)</span><br>${formatCurrency(multaMostrar)}`
+            : '<span class="text-muted">Sin mora</span>'
+          }
+        </td>
+        <td>
+          ${r.estado !== 'DEVUELTO' && hasPerm('PEDIDOS_CAMBIAR_ESTADO')
+            ? `<button class="btn btn-sm btn-pds" onclick="openReturnRentalModal('${r.id}')"><i class="bi bi-check2-circle"></i> Devolver</button>`
+            : `<span class="small text-muted">${r.fecha_devolucion_real ? `Devuelto ${formatDate(r.fecha_devolucion_real)}` : '-'}</span>`
+          }
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+document.getElementById('adminRentalStatusFilter').addEventListener('change', (e) => {
+  loadAdminRentals(e.target.value);
+});
+
+function openReturnRentalModal(rentalId) {
+  const r = cachedRentals.find((item) => item.id === rentalId);
+  if (!r) return;
+  document.getElementById('returnRentalId').value = r.id;
+  document.getElementById('returnRentalMulta').value = r.multa_sugerida || 0;
+  document.getElementById('returnRentalObs').value = r.observaciones || '';
+  document.getElementById('returnRentalSummary').innerHTML = `
+    <div><strong>Libro:</strong> ${r.libro_titulo} (${r.formato})</div>
+    <div><strong>Cliente:</strong> ${r.cliente_nombre} ${r.cliente_apellido} (${r.cliente_email})</div>
+    <div><strong>Vencimiento:</strong> ${formatDate(r.fecha_vencimiento)}</div>
+    <div class="${r.dias_mora > 0 ? 'text-danger fw-semibold' : 'text-success'}">
+      ${r.dias_mora > 0 ? `Retraso detectado: ${r.dias_mora} dia(s) · Multa sugerida: ${formatCurrency(r.multa_sugerida)}` : 'Dentro del plazo establecido (sin multa).'}
+    </div>
+  `;
+  new bootstrap.Modal(document.getElementById('returnRentalModal')).show();
+}
+
+document.getElementById('returnRentalForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const rentalId = document.getElementById('returnRentalId').value;
+  try {
+    await apiRequest(`/orders/rentals/${rentalId}/return`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        multa: Number(document.getElementById('returnRentalMulta').value) || 0,
+        observaciones: document.getElementById('returnRentalObs').value
+      })
+    });
+    bootstrap.Modal.getInstance(document.getElementById('returnRentalModal')).hide();
+    showAdminAlert('Devolucion registrada correctamente.', 'success');
+    await Promise.all([
+      loadAdminRentals(document.getElementById('adminRentalStatusFilter').value),
+      loadAdminBooks(document.getElementById('adminBookSearch').value),
+      loadInventoryHistory(),
+      loadAuditHistory(),
+      loadDashboard()
+    ]);
+  } catch (error) {
+    showAdminAlert(error.message, 'danger');
+  }
+});
+
+// --- Cupones y Descuentos ---
+
+async function loadCoupons() {
+  if (!hasPerm('PARAMETRIZACION_GESTIONAR')) return;
+  const res = await apiRequest('/coupons');
+  cachedCoupons = res.data || [];
+  const tbody = document.getElementById('adminCouponsTable');
+
+  if (cachedCoupons.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No hay cupones registrados.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = cachedCoupons.map((c) => `
+    <tr>
+      <td>
+        <strong>${c.codigo}</strong>
+        ${c.descripcion ? `<br><small class="text-muted">${c.descripcion}</small>` : ''}
+      </td>
+      <td>${c.tipo === 'PORCENTAJE' ? `${Number(c.valor)}%` : formatCurrency(c.valor)}</td>
+      <td class="small">${formatCurrency(c.monto_minimo)}</td>
+      <td class="small">${c.usos_actuales} / ${c.usos_maximos || '∞'}</td>
+      <td>
+        <span class="badge bg-${c.activo ? 'success' : 'secondary'}">${c.activo ? 'ACTIVO' : 'INACTIVO'}</span>
+      </td>
+      <td>
+        <button class="btn btn-sm btn-outline-${c.activo ? 'warning' : 'success'}" onclick="toggleCouponStatus(${c.id}, ${c.activo ? 0 : 1})" title="${c.activo ? 'Desactivar' : 'Activar'}">
+          <i class="bi bi-${c.activo ? 'pause-circle' : 'play-circle'}"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteCoupon(${c.id})" title="Eliminar">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('couponForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const expVal = document.getElementById('couponExp').value;
+  try {
+    await apiRequest('/coupons', {
+      method: 'POST',
+      body: JSON.stringify({
+        codigo: document.getElementById('couponCode').value,
+        tipo: document.getElementById('couponType').value,
+        valor: Number(document.getElementById('couponValor').value),
+        monto_minimo: Number(document.getElementById('couponMin').value) || 0,
+        usos_maximos: document.getElementById('couponMaxUses').value ? Number(document.getElementById('couponMaxUses').value) : null,
+        fecha_expiracion: expVal ? expVal.replace('T', ' ') + ':00' : null,
+        descripcion: document.getElementById('couponDesc').value
+      })
+    });
+    e.target.reset();
+    await loadCoupons();
+    await loadAuditHistory();
+    showAdminAlert('Cupon creado correctamente.', 'success');
+  } catch (error) {
+    showAdminAlert(error.message, 'danger');
+  }
+});
+
+async function toggleCouponStatus(id, activo) {
+  try {
+    await apiRequest(`/coupons/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ activo })
+    });
+    await loadCoupons();
+    showAdminAlert(`Cupon ${activo ? 'activado' : 'desactivado'}.`, 'success');
+  } catch (error) {
+    showAdminAlert(error.message, 'danger');
+  }
+}
+
+async function deleteCoupon(id) {
+  if (!confirm('Deseas eliminar este cupon?')) return;
+  try {
+    await apiRequest(`/coupons/${id}`, { method: 'DELETE' });
+    await loadCoupons();
+    showAdminAlert('Cupon eliminado correctamente.', 'success');
+  } catch (error) {
+    showAdminAlert(error.message, 'danger');
+  }
 }
 
 async function loadInventoryHistory() {
@@ -924,6 +1163,8 @@ if (checkAdminSession()) {
   loadAdminBooks();
   loadUsers();
   loadAdminOrders();
+  loadAdminRentals();
+  loadCoupons();
   loadInventoryHistory();
   loadAuditHistory();
 }

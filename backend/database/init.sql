@@ -268,10 +268,27 @@ CREATE TABLE IF NOT EXISTS carrito_items (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS cupones (
+  id INT NOT NULL AUTO_INCREMENT,
+  codigo VARCHAR(40) NOT NULL,
+  descripcion VARCHAR(200) NULL,
+  tipo ENUM('PORCENTAJE', 'MONTO_FIJO') NOT NULL DEFAULT 'PORCENTAJE',
+  valor DECIMAL(10, 2) NOT NULL,
+  monto_minimo DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  usos_maximos INT NULL,
+  usos_actuales INT NOT NULL DEFAULT 0,
+  fecha_expiracion TIMESTAMP NULL DEFAULT NULL,
+  activo TINYINT(1) NOT NULL DEFAULT 1,
+  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_cupones_codigo (codigo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS pedidos (
   id CHAR(36) NOT NULL,
   numero_orden VARCHAR(20) NOT NULL,
   usuario_id CHAR(36) NOT NULL,
+  cupon_codigo VARCHAR(40) NULL,
   subtotal DECIMAL(10, 2) NOT NULL,
   descuento DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
   impuestos DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
@@ -653,6 +670,9 @@ INSERT IGNORE INTO libros (
     7, 6, 2,
     'DISPONIBLE'
   );
+
+INSERT IGNORE INTO cupones (id, codigo, descripcion, tipo, valor, monto_minimo, usos_maximos, activo) VALUES
+  (1, 'DANZARA10', 'Descuento de bienvenida del 10% en tu pedido', 'PORCENTAJE', 10.00, 30000.00, 100, 1);
 
 UPDATE libros
 SET contenido_digital = CONCAT(

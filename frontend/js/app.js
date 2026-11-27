@@ -12,6 +12,8 @@ let currentPage = 1;
 const PAGE_LIMIT = 8;
 let favoriteBookIds = new Set();
 let searchDebounceTimer = null;
+let currentCartSubtotal = 0;
+let appliedCoupon = null;
 
 function showAlert(message, type = 'info', target = alertContainer) {
   if (target !== alertContainer) {
@@ -247,7 +249,7 @@ async function loadBooks() {
           <div class="card h-100 book-card">
             <div class="book-cover-wrapper">
               ${book.portada_url
-                ? `<img src="${book.portada_url}" alt="${book.titulo}" class="book-cover-img" onerror="this.outerHTML='<div class=\\'book-cover-placeholder\\'><i class=\\'bi bi-journal-bookmark fs-1 mb-2\\'></i><span class=\\'small\\'>Sin portada</span></div>'">`
+                ? `<img src="${resolveAssetUrl(book.portada_url)}" alt="${book.titulo}" class="book-cover-img" onerror="this.outerHTML='<div class=\\'book-cover-placeholder\\'><i class=\\'bi bi-journal-bookmark fs-1 mb-2\\'></i><span class=\\'small\\'>Sin portada</span></div>'">`
                 : `<div class="book-cover-placeholder"><i class="bi bi-journal-bookmark fs-1 mb-2"></i><span class="small fw-medium">${book.categoria_nombre || 'Danzara'}</span></div>`
               }
               <button type="button" class="fav-btn ${isFav ? 'is-fav' : ''}" data-book-id="${book.id}" onclick="toggleFavorite('${book.id}')" title="${isFav ? 'Quitar de favoritos' : 'Guardar en favoritos'}">
@@ -295,15 +297,44 @@ async function loadBooks() {
   }
 }
 
+function updateCartTotalsUI() {
+  const subtotalEl = document.getElementById('cartSubtotal');
+  const discountRow = document.getElementById('cartDiscountRow');
+  const discountVal = document.getElementById('cartDiscountValue');
+  const totalEl = document.getElementById('cartTotal');
+  const removeBtn = document.getElementById('removeCouponBtn');
+
+  subtotalEl.textContent = formatCurrency(currentCartSubtotal);
+
+  if (appliedCoupon && currentCartSubtotal > 0) {
+    const desc = Math.min(Number(appliedCoupon.descuento) || 0, currentCartSubtotal);
+    discountRow.classList.remove('d-none');
+    discountVal.textContent = `- ${formatCurrency(desc)}`;
+    totalEl.textContent = formatCurrency(Math.max(currentCartSubtotal - desc, 0));
+    removeBtn.classList.remove('d-none');
+  } else {
+    discountRow.classList.add('d-none');
+    totalEl.textContent = formatCurrency(currentCartSubtotal);
+    removeBtn.classList.add('d-none');
+  }
+}
+
+function clearAppliedCoupon() {
+  appliedCoupon = null;
+  document.getElementById('couponInput').value = '';
+  document.getElementById('couponFeedback').innerHTML = '';
+  updateCartTotalsUI();
+}
+
 async function loadCart() {
   const badge = document.getElementById('cartBadge');
   const container = document.getElementById('cartItemsContainer');
-  const totalEl = document.getElementById('cartTotal');
 
   if (!getToken()) {
     badge.textContent = '0';
     container.innerHTML = '<p class="text-muted">Inicia sesion para gestionar tu carrito.</p>';
-    totalEl.textContent = '$0';
+    currentCartSubtotal = 0;
+    clearAppliedCoupon();
     return;
   }
 
@@ -311,12 +342,28 @@ async function loadCart() {
     const res = await apiRequest('/cart');
     const { items, total } = res.data;
     badge.textContent = items.reduce((acc, item) => acc + item.cantidad, 0);
-    totalEl.textContent = formatCurrency(total);
+    currentCartSubtotal = Number(total) || 0;
 
     if (items.length === 0) {
       container.innerHTML = '<p class="text-muted text-center my-4">Tu carrito esta vacio.</p>';
+      clearAppliedCoupon();
       return;
     }
+
+    if (appliedCoupon) {
+      try {
+        const valRes = await apiRequest('/coupons/validate', {
+          method: 'POST',
+          body: JSON.stringify({ codigo: appliedCoupon.codigo, subtotal: currentCartSubtotal })
+        });
+        appliedCoupon = valRes.data;
+        document.getElementById('couponFeedback').innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> Cupon <strong>${appliedCoupon.codigo}</strong> activo (-${formatCurrency(appliedCoupon.descuento)}).</span>`;
+      } catch (err) {
+        appliedCoupon = null;
+        document.getElementById('couponFeedback').innerHTML = `<span class="text-warning">${err.message}</span>`;
+      }
+    }
+    updateCartTotalsUI();
 
     container.innerHTML = items.map((item) => `
       <div class="card mb-2 border">
@@ -419,7 +466,7 @@ async function openBookDetail(bookId) {
 
     body.innerHTML = `
       <div class="row g-3 mb-3">
-        ${book.portada_url ? `<div class="col-md-4"><img src="${book.portada_url}" alt="${book.titulo}" class="img-fluid rounded border"></div>` : ''}
+        ${book.portada_url ? `<div class="col-md-4"><img src="${resolveAssetUrl(book.portada_url)}" alt="${book.titulo}" class="img-fluid rounded border"></div>` : ''}
         <div class="${book.portada_url ? 'col-md-8' : 'col-12'}">
           <p><strong>Autor:</strong> ${book.autor_nombre || 'N/A'} | <strong>Editorial:</strong> ${book.editorial_nombre || 'N/A'}</p>
           <p><strong>ISBN:</strong> ${book.isbn || 'N/A'} | <strong>Formato:</strong> ${book.formato} | <strong>Stock fisico:</strong> ${book.stock_fisico}</p>
@@ -476,6 +523,7 @@ async function submitReview(event, bookId) {
 
 let currentLoginCaptchaToken = '';
 let currentRegCaptchaToken = '';
+let currentRecoverCaptchaToken = '';
 
 async function loadAuthCaptcha(mode = 'both') {
   try {
@@ -491,6 +539,12 @@ async function loadAuthCaptcha(mode = 'both') {
       document.getElementById('regCaptchaQuestion').textContent = res.data.question;
       document.getElementById('regCaptchaAnswer').value = '';
     }
+    if (mode === 'recover' || mode === 'both') {
+      const res = await apiRequest('/auth/captcha');
+      currentRecoverCaptchaToken = res.data.captchaToken;
+      document.getElementById('recoverCaptchaQuestion').textContent = res.data.question;
+      document.getElementById('recoverCaptchaAnswer').value = '';
+    }
   } catch {
     // Silenciar si falla al abrir inicialmente
   }
@@ -498,10 +552,62 @@ async function loadAuthCaptcha(mode = 'both') {
 
 document.getElementById('authModal').addEventListener('show.bs.modal', () => {
   document.getElementById('authAlert').innerHTML = '';
+  document.getElementById('resetPasswordForm').classList.add('d-none');
   loadAuthCaptcha('both');
 });
 document.getElementById('refreshLoginCaptcha').addEventListener('click', () => loadAuthCaptcha('login'));
 document.getElementById('refreshRegCaptcha').addEventListener('click', () => loadAuthCaptcha('register'));
+document.getElementById('refreshRecoverCaptcha').addEventListener('click', () => loadAuthCaptcha('recover'));
+document.getElementById('openRecoverLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  bootstrap.Tab.getOrCreateInstance(document.getElementById('recoverTabBtn')).show();
+});
+
+document.getElementById('forgotPasswordForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const authAlert = document.getElementById('authAlert');
+  try {
+    const res = await apiRequest('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: document.getElementById('recoverEmail').value,
+        captchaToken: currentRecoverCaptchaToken,
+        captchaAnswer: document.getElementById('recoverCaptchaAnswer').value
+      })
+    });
+    document.getElementById('resetPasswordForm').classList.remove('d-none');
+    showAlert(
+      `Codigo temporal generado (valido por ${res.data.expira_minutos} min). <strong>Codigo de demostracion: ${res.data.codigo_demo}</strong>`,
+      'info',
+      authAlert
+    );
+  } catch (error) {
+    showAlert(error.message, 'danger', authAlert);
+    loadAuthCaptcha('recover');
+  }
+});
+
+document.getElementById('resetPasswordForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const authAlert = document.getElementById('authAlert');
+  try {
+    await apiRequest('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: document.getElementById('recoverEmail').value,
+        codigo: document.getElementById('resetCodeInput').value,
+        nuevaContrasena: document.getElementById('resetNewPassInput').value
+      })
+    });
+    e.target.reset();
+    document.getElementById('resetPasswordForm').classList.add('d-none');
+    bootstrap.Tab.getOrCreateInstance(document.getElementById('loginTabBtn')).show();
+    loadAuthCaptcha('login');
+    showAlert('Contrasena actualizada correctamente. Ahora puedes iniciar sesion.', 'success', authAlert);
+  } catch (error) {
+    showAlert(error.message, 'danger', authAlert);
+  }
+});
 
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -657,7 +763,7 @@ async function openFavoritesModal() {
             <div class="card border h-100">
               <div class="card-body p-2 d-flex gap-2 align-items-center">
                 ${book.portada_url
-                  ? `<img src="${book.portada_url}" alt="${book.titulo}" class="book-thumb">`
+                  ? `<img src="${resolveAssetUrl(book.portada_url)}" alt="${book.titulo}" class="book-thumb">`
                   : '<div class="book-thumb d-flex align-items-center justify-content-center bg-light text-muted"><i class="bi bi-book"></i></div>'
                 }
                 <div class="flex-grow-1 min-w-0">
@@ -725,6 +831,39 @@ document.getElementById('nextPayBtn').addEventListener('click', () => {
   selectPaymentMethod(paymentMethods[currentPayIndex]);
 });
 
+document.getElementById('applyCouponBtn').addEventListener('click', async () => {
+  const code = document.getElementById('couponInput').value.trim();
+  const feedback = document.getElementById('couponFeedback');
+  if (!getToken()) {
+    feedback.innerHTML = '<span class="text-warning">Inicia sesion para aplicar un cupon.</span>';
+    return;
+  }
+  if (!code) {
+    feedback.innerHTML = '<span class="text-warning">Ingresa un codigo de cupon.</span>';
+    return;
+  }
+  if (currentCartSubtotal <= 0) {
+    feedback.innerHTML = '<span class="text-warning">Agrega al menos un libro al carrito primero.</span>';
+    return;
+  }
+
+  try {
+    const res = await apiRequest('/coupons/validate', {
+      method: 'POST',
+      body: JSON.stringify({ codigo: code, subtotal: currentCartSubtotal })
+    });
+    appliedCoupon = res.data;
+    feedback.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> Cupon <strong>${appliedCoupon.codigo}</strong> aplicado (-${formatCurrency(appliedCoupon.descuento)}).</span>`;
+    updateCartTotalsUI();
+  } catch (error) {
+    appliedCoupon = null;
+    feedback.innerHTML = `<span class="text-danger">${error.message}</span>`;
+    updateCartTotalsUI();
+  }
+});
+
+document.getElementById('removeCouponBtn').addEventListener('click', clearAppliedCoupon);
+
 document.getElementById('checkoutForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!getToken()) {
@@ -764,10 +903,12 @@ document.getElementById('checkoutForm').addEventListener('submit', async (e) => 
       body: JSON.stringify({
         metodo_pago,
         datos_pago,
+        codigo_cupon: appliedCoupon ? appliedCoupon.codigo : null,
         direccion_envio: document.getElementById('shippingAddress').value,
         ciudad: document.getElementById('shippingCity').value
       })
     });
+    clearAppliedCoupon();
     bootstrap.Offcanvas.getInstance(document.getElementById('cartOffcanvas')).hide();
     await loadCart();
     await loadBooks();
@@ -849,9 +990,14 @@ document.getElementById('openAccountBtn').addEventListener('click', async (e) =>
             <td>${o.metodo_pago || '-'}</td>
             <td>${formatCurrency(o.total)}</td>
             <td>
-              <a href="factura.html?orderId=${o.id}" target="_blank" class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-receipt"></i> ${o.numero_factura || 'Ver'}
-              </a>
+              <div class="d-flex gap-1">
+                <a href="factura.html?orderId=${o.id}" target="_blank" class="btn btn-sm btn-outline-primary" title="Ver factura">
+                  <i class="bi bi-receipt"></i> ${o.numero_factura || 'Ver'}
+                </a>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openClientOrderTimeline('${o.id}')" title="Seguimiento">
+                  <i class="bi bi-clock-history"></i>
+                </button>
+              </div>
             </td>
           </tr>
         `).join('')
@@ -894,6 +1040,19 @@ document.getElementById('openAccountBtn').addEventListener('click', async (e) =>
     body.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
   }
 });
+
+async function openClientOrderTimeline(orderId) {
+  const body = document.getElementById('clientOrderTimelineBody');
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('clientOrderTimelineModal'));
+  body.innerHTML = '<p class="text-muted">Cargando seguimiento...</p>';
+  modal.show();
+  try {
+    const res = await apiRequest(`/orders/${orderId}`);
+    body.innerHTML = renderOrderTimelineHtml(res.data);
+  } catch (error) {
+    body.innerHTML = `<div class="alert alert-danger mb-0">${error.message}</div>`;
+  }
+}
 
 // --- Eventos de busqueda y filtros ---
 

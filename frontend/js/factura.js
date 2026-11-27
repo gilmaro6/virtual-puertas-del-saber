@@ -95,6 +95,12 @@ async function loadInvoice() {
               <td class="text-muted">Subtotal Exento (0%):</td>
               <td class="text-end fw-semibold">${formatCurrency(factura.subtotal_exento)}</td>
             </tr>
+            ${Number(pedido.descuento) > 0 ? `
+            <tr>
+              <td class="text-success">Descuento${pedido.cupon_codigo ? ` (${pedido.cupon_codigo})` : ''}:</td>
+              <td class="text-end fw-semibold text-success">- ${formatCurrency(pedido.descuento)}</td>
+            </tr>
+            ` : ''}
             <tr>
               <td class="text-muted">Subtotal Base Gravada (19%):</td>
               <td class="text-end fw-semibold">${formatCurrency(factura.subtotal_gravado)}</td>

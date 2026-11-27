@@ -2,6 +2,9 @@ const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/database');
 const AppError = require('../utils/appError');
 const { logAudit } = require('./auditService');
+const couponService = require('./couponService');
+
+const DAILY_LATE_FEE = 2000;
 
 function generateOrderNumber() {
   const now = new Date();
@@ -67,7 +70,7 @@ function validatePaymentDetails(metodoPago, paymentData = {}) {
   return { modalidad: 'Pago contraentrega en domicilio' };
 }
 
-async function createOrder(usuarioId, { metodo_pago = 'TARJETA', direccion_envio = null, ciudad = null, notas = null, datos_pago = {} }, ipOrigen) {
+async function createOrder(usuarioId, { metodo_pago = 'TARJETA', direccion_envio = null, ciudad = null, notas = null, datos_pago = {}, codigo_cupon = null }, ipOrigen) {
   const validMethods = ['TARJETA', 'PSE', 'TRANSFERENCIA', 'EFECTIVO'];
   if (!validMethods.includes(metodo_pago)) {
     throw new AppError('Metodo de pago no soportado', 400);
@@ -125,8 +128,23 @@ async function createOrder(usuarioId, { metodo_pago = 'TARJETA', direccion_envio
     }
 
     const impuestos = 0;
-    const descuento = 0;
-    total = subtotalPedido - descuento + impuestos;
+    let descuento = 0;
+    let cuponAplicado = null;
+
+    if (codigo_cupon && String(codigo_cupon).trim()) {
+      const cleanCode = String(codigo_cupon).trim().toUpperCase();
+      const [couponRows] = await connection.query('SELECT * FROM cupones WHERE codigo = ? FOR UPDATE', [cleanCode]);
+      if (couponRows.length === 0) {
+        throw new AppError('El codigo de cupon ingresado no existe', 404);
+      }
+      const coupon = couponRows[0];
+      const calc = couponService.calculateCouponDiscount(coupon, subtotalPedido);
+      descuento = calc.descuento;
+      cuponAplicado = coupon.codigo;
+      await connection.query('UPDATE cupones SET usos_actuales = usos_actuales + 1 WHERE id = ?', [coupon.id]);
+    }
+
+    total = Math.max(subtotalPedido - descuento + impuestos, 0);
     orderId = uuidv4();
     numeroOrden = generateOrderNumber();
 
@@ -134,9 +152,9 @@ async function createOrder(usuarioId, { metodo_pago = 'TARJETA', direccion_envio
     const estadoPago = metodo_pago === 'EFECTIVO' ? 'PENDIENTE' : 'APROBADO';
 
     await connection.query(
-      `INSERT INTO pedidos (id, numero_orden, usuario_id, subtotal, descuento, impuestos, total, estado, direccion_envio, ciudad, notas)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [orderId, numeroOrden, usuarioId, subtotalPedido, descuento, impuestos, total, estadoInicial, direccion_envio, ciudad, notas]
+      `INSERT INTO pedidos (id, numero_orden, usuario_id, cupon_codigo, subtotal, descuento, impuestos, total, estado, direccion_envio, ciudad, notas)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [orderId, numeroOrden, usuarioId, cuponAplicado, subtotalPedido, descuento, impuestos, total, estadoInicial, direccion_envio, ciudad, notas]
     );
 
     for (const item of preparedItems) {
@@ -375,9 +393,53 @@ async function updateOrderStatus(orderId, { estado, comentario = null }, adminId
   return getOrderById(orderId, adminId, 'ADMIN');
 }
 
-async function returnRental(rentalId, { observaciones = null }, adminId, ipOrigen) {
+async function listAllRentals({ estado }) {
+  const conditions = [];
+  const params = [];
+
+  if (estado === 'VENCIDO') {
+    conditions.push("((pa.estado = 'ACTIVO' AND pa.fecha_vencimiento < NOW()) OR pa.estado = 'VENCIDO')");
+  } else if (estado === 'ACTIVO') {
+    conditions.push("pa.estado = 'ACTIVO' AND pa.fecha_vencimiento >= NOW()");
+  } else if (estado === 'DEVUELTO') {
+    conditions.push("pa.estado = 'DEVUELTO'");
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const [rows] = await pool.query(
-    `SELECT pa.*, f.requiere_stock, l.stock_fisico
+    `SELECT pa.*,
+            u.nombre AS cliente_nombre, u.apellido AS cliente_apellido, u.email AS cliente_email,
+            l.titulo AS libro_titulo, f.codigo AS formato, f.requiere_stock,
+            p.numero_orden,
+            GREATEST(0, DATEDIFF(COALESCE(pa.fecha_devolucion_real, NOW()), pa.fecha_vencimiento)) AS dias_mora
+     FROM prestamos_alquileres pa
+     INNER JOIN usuarios u ON pa.usuario_id = u.id
+     INNER JOIN libros l ON pa.libro_id = l.id
+     INNER JOIN formatos f ON l.formato_id = f.id
+     LEFT JOIN pedidos p ON pa.pedido_id = p.id
+     ${whereClause}
+     ORDER BY pa.fecha_inicio DESC`,
+    params
+  );
+
+  return rows.map((row) => {
+    const diasMora = Number(row.dias_mora) || 0;
+    const estadoEfectivo = row.estado === 'ACTIVO' && diasMora > 0 ? 'VENCIDO' : row.estado;
+    const multaSugerida = diasMora * DAILY_LATE_FEE;
+    return {
+      ...row,
+      dias_mora: diasMora,
+      estado_efectivo: estadoEfectivo,
+      multa_sugerida: multaSugerida,
+      tarifa_mora_diaria: DAILY_LATE_FEE
+    };
+  });
+}
+
+async function returnRental(rentalId, { observaciones = null, multa = undefined }, adminId, ipOrigen) {
+  const [rows] = await pool.query(
+    `SELECT pa.*, f.requiere_stock, l.stock_fisico,
+            GREATEST(0, DATEDIFF(NOW(), pa.fecha_vencimiento)) AS dias_mora
      FROM prestamos_alquileres pa
      INNER JOIN libros l ON pa.libro_id = l.id
      INNER JOIN formatos f ON l.formato_id = f.id
@@ -394,13 +456,18 @@ async function returnRental(rentalId, { observaciones = null }, adminId, ipOrige
     throw new AppError('Este alquiler ya fue marcado como devuelto', 400);
   }
 
+  const diasMora = Number(rental.dias_mora) || 0;
+  const multaCalculada = multa !== undefined && multa !== null && multa !== ''
+    ? Math.max(Number(multa) || 0, 0)
+    : diasMora * DAILY_LATE_FEE;
+
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
     await connection.query(
-      "UPDATE prestamos_alquileres SET estado = 'DEVUELTO', fecha_devolucion_real = NOW(), observaciones = ? WHERE id = ?",
-      [observaciones, rentalId]
+      "UPDATE prestamos_alquileres SET estado = 'DEVUELTO', fecha_devolucion_real = NOW(), multa = ?, observaciones = ? WHERE id = ?",
+      [multaCalculada, observaciones, rentalId]
     );
 
     if (rental.requiere_stock) {
@@ -429,6 +496,7 @@ async function returnRental(rentalId, { observaciones = null }, adminId, ipOrige
     accion: 'DEVOLUCION_ALQUILER',
     entidad: 'prestamos_alquileres',
     entidadId: rentalId,
+    detalle: { dias_mora: diasMora, multa: multaCalculada },
     ipOrigen
   });
 
@@ -512,6 +580,9 @@ async function getOrderInvoice(orderId, usuarioId, rol) {
     pedido: {
       id: order.id,
       numero_orden: order.numero_orden,
+      cupon_codigo: order.cupon_codigo || null,
+      subtotal: Number(order.subtotal) || 0,
+      descuento: Number(order.descuento) || 0,
       estado: order.estado,
       direccion_envio: order.direccion_envio,
       ciudad: order.ciudad,
@@ -655,6 +726,7 @@ module.exports = {
   getOrderById,
   getOrderInvoice,
   listAllOrders,
+  listAllRentals,
   updateOrderStatus,
   returnRental,
   getInventoryHistory,

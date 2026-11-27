@@ -83,12 +83,39 @@ function checkAdminAccess(req, res) {
   });
 }
 
+async function forgotPassword(req, res, next) {
+  try {
+    const result = await authService.requestPasswordReset(req.body, req.ip);
+    res.status(200).json({
+      status: 'ok',
+      message: 'Codigo de recuperacion generado correctamente',
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function resetPassword(req, res, next) {
+  try {
+    await authService.resetPasswordWithCode(req.body, req.ip);
+    res.status(200).json({
+      status: 'ok',
+      message: 'Contrasena actualizada correctamente. Ya puedes iniciar sesion.'
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getCaptcha,
   register,
   login,
   getProfile,
   updateProfile,
+  forgotPassword,
+  resetPassword,
   logout,
   checkAdminAccess
 };
