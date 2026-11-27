@@ -123,8 +123,9 @@
               <h4 class="fw-bold mb-0">Indicadores y Reportes</h4>
               <p class="text-muted small mb-0">Resumen operativo en tiempo real de ventas, inventario y alquileres.</p>
             </div>
-            <div class="btn-group btn-group-sm">
+            <div class="btn-group btn-group-sm flex-wrap">
               <button class="btn btn-outline-primary" onclick="downloadCsvReport('sales')"><i class="bi bi-download"></i> CSV Ventas</button>
+              <button class="btn btn-outline-primary" onclick="downloadCsvReport('rentals')"><i class="bi bi-download"></i> CSV Alquileres</button>
               <button class="btn btn-outline-primary" onclick="downloadCsvReport('inventory')"><i class="bi bi-download"></i> CSV Inventario</button>
               <button class="btn btn-outline-primary" onclick="downloadCsvReport('audit')"><i class="bi bi-download"></i> CSV Auditoria</button>
             </div>
@@ -509,9 +510,43 @@
 
         <!-- Historial Inventario -->
         <section class="admin-section d-none" id="inventoryTab">
-          <h4 class="fw-bold mb-3">Movimientos de Inventario</h4>
+          <h4 class="fw-bold mb-3">Kardex y Movimientos de Inventario</h4>
+
+          <div class="card card-pds shadow-sm mb-3">
+            <div class="card-body">
+              <h6 class="fw-bold mb-2"><i class="bi bi-arrow-left-right"></i> Registrar Movimiento Manual (Entrada / Salida / Devolucion)</h6>
+              <form id="inventoryAdjustForm" class="row g-2 align-items-end">
+                <div class="col-md-4">
+                  <label class="form-label small fw-semibold mb-1">Libro fisico</label>
+                  <select class="form-select form-select-sm" id="invBookSelect" required>
+                    <option value="">Seleccionar libro...</option>
+                  </select>
+                </div>
+                <div class="col-sm-6 col-md-2">
+                  <label class="form-label small fw-semibold mb-1">Tipo</label>
+                  <select class="form-select form-select-sm" id="invTypeSelect" required>
+                    <option value="ENTRADA">Entrada (+)</option>
+                    <option value="SALIDA">Salida / Merma (-)</option>
+                    <option value="DEVOLUCION">Devolucion (+)</option>
+                  </select>
+                </div>
+                <div class="col-sm-6 col-md-2">
+                  <label class="form-label small fw-semibold mb-1">Cantidad</label>
+                  <input type="number" class="form-control form-control-sm" id="invQtyInput" min="1" value="1" required>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small fw-semibold mb-1">Motivo obligatorio</label>
+                  <input type="text" class="form-control form-control-sm" id="invReasonInput" placeholder="Ej. Compra editorial #450" minlength="4" required>
+                </div>
+                <div class="col-md-1">
+                  <button type="submit" class="btn btn-pds btn-sm w-100" title="Aplicar movimiento">Aplicar</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
           <div class="table-responsive card-pds shadow-sm p-2">
-            <table class="table table-sm table-striped mb-0">
+            <table class="table table-sm table-striped align-middle mb-0">
               <thead>
                 <tr><th>Fecha</th><th>Libro</th><th>Tipo</th><th>Cantidad</th><th>Stock Ant.</th><th>Stock Nuevo</th><th>Motivo</th></tr>
               </thead>
@@ -522,11 +557,53 @@
 
         <!-- Auditoria -->
         <section class="admin-section d-none" id="auditTab">
-          <h4 class="fw-bold mb-3">Bitacora de Auditoria</h4>
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <h4 class="fw-bold mb-0">Bitacora de Auditoria y Seguridad</h4>
+          </div>
+
+          <div class="card card-pds shadow-sm mb-3">
+            <div class="card-body py-2 px-3">
+              <form id="auditFilterForm" class="row g-2 align-items-end">
+                <div class="col-md-3">
+                  <label class="form-label small fw-semibold mb-1">Accion</label>
+                  <select class="form-select form-select-sm" id="auditActionFilter">
+                    <option value="">Todas las acciones</option>
+                    <option value="ALERTA_SEGURIDAD_LECTOR">ALERTA_SEGURIDAD_LECTOR</option>
+                    <option value="LOGIN">LOGIN</option>
+                    <option value="CREAR_PEDIDO">CREAR_PEDIDO</option>
+                    <option value="CAMBIAR_ESTADO_PEDIDO">CAMBIAR_ESTADO_PEDIDO</option>
+                    <option value="DEVOLUCION_ALQUILER">DEVOLUCION_ALQUILER</option>
+                    <option value="MOVIMIENTO_INVENTARIO_MANUAL">MOVIMIENTO_INVENTARIO_MANUAL</option>
+                    <option value="CREAR_LIBRO">CREAR_LIBRO</option>
+                    <option value="ACTUALIZAR_LIBRO">ACTUALIZAR_LIBRO</option>
+                    <option value="CREAR_CUPON">CREAR_CUPON</option>
+                    <option value="RESTABLECER_PASSWORD_TOKEN">RESTABLECER_PASSWORD_TOKEN</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small fw-semibold mb-1">Usuario / Entidad</label>
+                  <input type="search" class="form-control form-control-sm" id="auditQueryInput" placeholder="Correo o entidad...">
+                </div>
+                <div class="col-6 col-md-2">
+                  <label class="form-label small fw-semibold mb-1">Desde</label>
+                  <input type="date" class="form-control form-control-sm" id="auditDesde">
+                </div>
+                <div class="col-6 col-md-2">
+                  <label class="form-label small fw-semibold mb-1">Hasta</label>
+                  <input type="date" class="form-control form-control-sm" id="auditHasta">
+                </div>
+                <div class="col-md-2 d-flex gap-1">
+                  <button type="submit" class="btn btn-pds btn-sm w-100">Filtrar</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" id="auditClearBtn" title="Limpiar"><i class="bi bi-x-lg"></i></button>
+                </div>
+              </form>
+            </div>
+          </div>
+
           <div class="table-responsive card-pds shadow-sm p-2">
-            <table class="table table-sm table-striped mb-0">
+            <table class="table table-sm table-striped align-middle mb-0">
               <thead>
-                <tr><th>Fecha</th><th>Usuario</th><th>Accion</th><th>Entidad</th><th>IP</th></tr>
+                <tr><th>Fecha</th><th>Usuario</th><th>Accion</th><th>Entidad</th><th>Detalle</th><th>IP</th></tr>
               </thead>
               <tbody id="auditHistoryTable"></tbody>
             </table>
@@ -810,9 +887,26 @@
     </div>
   </div>
 
+  <!-- Modal Confirmacion Corporativo -->
+  <div class="modal fade" id="confirmActionModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header" style="background-color: var(--pds-primary); color: #ffffff;">
+          <h5 class="modal-title fw-bold" id="confirmModalTitle">Confirmar accion</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="confirmModalBody"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-danger btn-sm" id="confirmModalOkBtn">Confirmar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script src="js/api.js?v=9"></script>
-  <script src="js/admin.js?v=9"></script>
+  <script src="js/api.js?v=11"></script>
+  <script src="js/admin.js?v=11"></script>
 </body>
 </html>

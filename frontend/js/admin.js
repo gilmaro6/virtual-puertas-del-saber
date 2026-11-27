@@ -18,6 +18,35 @@ function showAdminAlert(message, type = 'info') {
   `;
 }
 
+function confirmAdminAction({ title = 'Confirmar accion', message = '¿Deseas continuar?', confirmText = 'Confirmar', variant = 'danger' }) {
+  return new Promise((resolve) => {
+    const modalEl = document.getElementById('confirmActionModal');
+    const okBtn = document.getElementById('confirmModalOkBtn');
+    document.getElementById('confirmModalTitle').textContent = title;
+    document.getElementById('confirmModalBody').innerHTML = message;
+    okBtn.textContent = confirmText;
+    okBtn.className = `btn btn-${variant} btn-sm`;
+
+    let settled = false;
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    const onConfirm = () => {
+      settled = true;
+      modal.hide();
+      resolve(true);
+    };
+    const onHidden = () => {
+      okBtn.removeEventListener('click', onConfirm);
+      modalEl.removeEventListener('hidden.bs.modal', onHidden);
+      if (!settled) resolve(false);
+    };
+
+    okBtn.addEventListener('click', onConfirm);
+    modalEl.addEventListener('hidden.bs.modal', onHidden);
+    modal.show();
+  });
+}
+
 function hasPerm(permCode) {
   const user = getStoredUser();
   if (!user) return false;
@@ -197,7 +226,7 @@ async function loadDashboard() {
           <div>
             <div class="small text-muted fw-medium">Alquileres Activos</div>
             <div class="fs-4 fw-bold text-success mt-1">${kpis.alquileres_activos}</div>
-            <div class="small text-danger fw-semibold">${kpis.alquileres_vencidos} vencido(s)</div>
+            <div class="small text-danger fw-semibold">${kpis.alquileres_vencidos} venc. · Multas: ${formatCurrency(kpis.total_multas)}</div>
           </div>
           <div class="kpi-icon" style="background: rgba(25, 135, 84, 0.12); color: #198754;">
             <i class="bi bi-journal-check"></i>
@@ -403,7 +432,13 @@ document.getElementById('paramEditForm').addEventListener('submit', async (e) =>
 });
 
 async function deleteParam(type, id) {
-  if (!confirm('Deseas eliminar este elemento de parametrizacion?')) return;
+  const confirmed = await confirmAdminAction({
+    title: 'Eliminar parametro',
+    message: '¿Deseas eliminar este elemento de parametrizacion? Esta accion no se puede deshacer.',
+    confirmText: 'Eliminar',
+    variant: 'danger'
+  });
+  if (!confirmed) return;
   try {
     await apiRequest(`/books/${type}/${id}`, { method: 'DELETE' });
     await loadMetaSelects();
@@ -423,6 +458,15 @@ async function loadAdminBooks(q = '') {
   const res = await apiRequest(`/books?${params.toString()}`);
   const tbody = document.getElementById('adminBooksTable');
   const items = res.data.items || [];
+
+  if (!q) {
+    const invSelect = document.getElementById('invBookSelect');
+    if (invSelect) {
+      const physicalBooks = items.filter((b) => b.formato !== 'DIGITAL');
+      invSelect.innerHTML = '<option value="">Seleccionar libro...</option>' +
+        physicalBooks.map((b) => `<option value="${b.id}">${b.titulo} (Stock: ${b.stock_fisico})</option>`).join('');
+    }
+  }
 
   if (items.length === 0) {
     tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">No se encontraron libros con ese criterio.</td></tr>';
@@ -543,7 +587,13 @@ async function editBook(id) {
 }
 
 async function deleteBook(id) {
-  if (!confirm('Deseas descontinuar este libro del catalogo?')) return;
+  const confirmed = await confirmAdminAction({
+    title: 'Descontinuar libro',
+    message: '¿Deseas descontinuar este libro del catalogo publico?',
+    confirmText: 'Descontinuar',
+    variant: 'danger'
+  });
+  if (!confirmed) return;
   try {
     await apiRequest(`/books/${id}`, { method: 'DELETE' });
     showAdminAlert('Libro descontinuado correctamente.', 'success');
@@ -729,7 +779,13 @@ document.getElementById('saveRolePermsBtn').addEventListener('click', async () =
 });
 
 async function deleteRole(roleId) {
-  if (!confirm('Deseas eliminar este rol?')) return;
+  const confirmed = await confirmAdminAction({
+    title: 'Eliminar rol',
+    message: '¿Deseas eliminar este rol personalizado del sistema?',
+    confirmText: 'Eliminar rol',
+    variant: 'danger'
+  });
+  if (!confirmed) return;
   try {
     await apiRequest(`/roles/${roleId}`, { method: 'DELETE' });
     await loadRolesAndPermissions();
@@ -903,7 +959,7 @@ async function loadAdminOrders(estado = '') {
         </div>
       </td>
       <td>
-        <select class="form-select form-select-sm" onchange="changeOrderStatus('${o.id}', this.value)">
+        <select class="form-select form-select-sm" ${o.estado === 'CANCELADO' ? 'disabled' : ''} onchange="changeOrderStatus('${o.id}', this.value, '${o.estado}')">
           ${states.map((s) => `<option value="${s}" ${s === o.estado ? 'selected' : ''}>${s}</option>`).join('')}
         </select>
       </td>
@@ -915,17 +971,47 @@ document.getElementById('adminOrderStatusFilter').addEventListener('change', (e)
   loadAdminOrders(e.target.value);
 });
 
-async function changeOrderStatus(orderId, estado) {
+async function changeOrderStatus(orderId, estado, previousState = '') {
+  if (estado === 'CANCELADO') {
+    const confirmed = await confirmAdminAction({
+      title: 'Cancelar pedido con reversion de inventario',
+      message: 'Al cancelar este pedido se <strong>revertira automaticamente el stock fisico</strong> y se cerraran los alquileres asociados. ¿Deseas continuar?',
+      confirmText: 'Si, cancelar pedido',
+      variant: 'danger'
+    });
+    if (!confirmed) {
+      await loadAdminOrders(document.getElementById('adminOrderStatusFilter').value);
+      return;
+    }
+  }
   try {
     await apiRequest(`/orders/${orderId}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ estado, comentario: 'Actualizacion desde panel administrativo' })
+      body: JSON.stringify({
+        estado,
+        comentario: estado === 'CANCELADO'
+          ? 'Cancelado desde panel administrativo con reversion automatica de stock'
+          : `Cambio de estado (${previousState || 'anterior'} -> ${estado})`
+      })
     });
-    showAdminAlert('Estado del pedido actualizado.', 'success');
+    showAdminAlert(
+      estado === 'CANCELADO'
+        ? 'Pedido cancelado y stock revertido correctamente.'
+        : 'Estado del pedido actualizado.',
+      'success'
+    );
+    await Promise.all([
+      loadAdminOrders(document.getElementById('adminOrderStatusFilter').value),
+      loadAdminBooks(document.getElementById('adminBookSearch').value),
+      loadAdminRentals(document.getElementById('adminRentalStatusFilter').value),
+      loadInventoryHistory(),
+      loadAuditHistory(),
+      loadDashboard()
+    ]);
+  } catch (error) {
+    showAdminAlert(error.message, 'danger');
     await loadAdminOrders(document.getElementById('adminOrderStatusFilter').value);
-    await loadAuditHistory();
-    await loadDashboard();
-  } catch (error) { showAdminAlert(error.message, 'danger'); }
+  }
 }
 
 async function openAdminOrderTimeline(orderId) {
@@ -1114,7 +1200,13 @@ async function toggleCouponStatus(id, activo) {
 }
 
 async function deleteCoupon(id) {
-  if (!confirm('Deseas eliminar este cupon?')) return;
+  const confirmed = await confirmAdminAction({
+    title: 'Eliminar cupon',
+    message: '¿Deseas eliminar este cupon de descuento?',
+    confirmText: 'Eliminar cupon',
+    variant: 'danger'
+  });
+  if (!confirmed) return;
   try {
     await apiRequest(`/coupons/${id}`, { method: 'DELETE' });
     await loadCoupons();
@@ -1124,35 +1216,114 @@ async function deleteCoupon(id) {
   }
 }
 
+document.getElementById('inventoryAdjustForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const res = await apiRequest('/orders/inventory/adjust', {
+      method: 'POST',
+      body: JSON.stringify({
+        libro_id: document.getElementById('invBookSelect').value,
+        tipo: document.getElementById('invTypeSelect').value,
+        cantidad: Number(document.getElementById('invQtyInput').value),
+        motivo: document.getElementById('invReasonInput').value
+      })
+    });
+    e.target.reset();
+    document.getElementById('invQtyInput').value = 1;
+    showAdminAlert(
+      `Kardex actualizado: "${res.data.titulo}" paso de ${res.data.stock_anterior} a ${res.data.stock_nuevo} unidades.`,
+      'success'
+    );
+    await Promise.all([
+      loadInventoryHistory(),
+      loadAdminBooks(document.getElementById('adminBookSearch').value),
+      loadDashboard(),
+      loadAuditHistory()
+    ]);
+  } catch (error) {
+    showAdminAlert(error.message, 'danger');
+  }
+});
+
 async function loadInventoryHistory() {
   if (!hasPerm('INVENTARIO_VER')) return;
-  const res = await apiRequest('/orders/history/inventory?limit=30');
+  const res = await apiRequest('/orders/history/inventory?limit=40');
   document.getElementById('inventoryHistoryTable').innerHTML = res.data.map((m) => `
     <tr>
-      <td>${formatDate(m.creado_en)}</td>
-      <td>${m.libro_titulo}</td>
-      <td><span class="badge bg-secondary">${m.tipo_movimiento}</span></td>
+      <td class="small">${formatDate(m.creado_en)}</td>
+      <td class="fw-semibold">${m.libro_titulo}</td>
+      <td><span class="badge bg-${m.tipo_movimiento === 'ENTRADA' || m.tipo_movimiento === 'DEVOLUCION' ? 'success' : 'secondary'}">${m.tipo_movimiento}</span></td>
       <td>${m.cantidad}</td>
       <td>${m.stock_anterior}</td>
-      <td>${m.stock_nuevo}</td>
-      <td>${m.motivo || '-'}</td>
+      <td><strong>${m.stock_nuevo}</strong></td>
+      <td class="small">${m.motivo || '-'}</td>
     </tr>
   `).join('');
 }
 
+function formatAuditDetail(detalle) {
+  if (!detalle) return '-';
+  try {
+    const obj = typeof detalle === 'string' ? JSON.parse(detalle) : detalle;
+    return Object.entries(obj)
+      .slice(0, 4)
+      .map(([k, v]) => `<span class="badge bg-light text-dark border me-1">${k}: ${v}</span>`)
+      .join('');
+  } catch {
+    return String(detalle).slice(0, 80);
+  }
+}
+
 async function loadAuditHistory() {
   if (!hasPerm('AUDITORIA_VER')) return;
-  const res = await apiRequest('/orders/history/audit?limit=30');
-  document.getElementById('auditHistoryTable').innerHTML = res.data.map((a) => `
+  const params = new URLSearchParams({ limit: '50' });
+  const accion = document.getElementById('auditActionFilter')?.value || '';
+  const q = document.getElementById('auditQueryInput')?.value.trim() || '';
+  const desde = document.getElementById('auditDesde')?.value || '';
+  const hasta = document.getElementById('auditHasta')?.value || '';
+
+  if (accion) params.append('accion', accion);
+  if (q) params.append('q', q);
+  if (desde) params.append('desde', desde);
+  if (hasta) params.append('hasta', hasta);
+
+  const res = await apiRequest(`/orders/history/audit?${params.toString()}`);
+  const items = res.data || [];
+  const tbody = document.getElementById('auditHistoryTable');
+
+  if (items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No hay registros de auditoria para estos filtros.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = items.map((a) => `
     <tr>
-      <td>${formatDate(a.creado_en)}</td>
-      <td>${a.usuario_email || 'Sistema'}</td>
-      <td><strong>${a.accion}</strong></td>
-      <td>${a.entidad}</td>
-      <td>${a.ip_origen || '-'}</td>
+      <td class="small text-nowrap">${formatDate(a.creado_en)}</td>
+      <td class="small">${a.usuario_email || 'Sistema'}</td>
+      <td>
+        <span class="badge bg-${a.accion === 'ALERTA_SEGURIDAD_LECTOR' ? 'danger' : 'dark'}">${a.accion}</span>
+      </td>
+      <td class="small">${a.entidad}</td>
+      <td class="small">${formatAuditDetail(a.detalle)}</td>
+      <td class="small text-muted">${a.ip_origen || '-'}</td>
     </tr>
   `).join('');
 }
+
+document.getElementById('auditFilterForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  loadAuditHistory();
+});
+
+document.getElementById('auditActionFilter').addEventListener('change', loadAuditHistory);
+
+document.getElementById('auditClearBtn').addEventListener('click', () => {
+  document.getElementById('auditActionFilter').value = '';
+  document.getElementById('auditQueryInput').value = '';
+  document.getElementById('auditDesde').value = '';
+  document.getElementById('auditHasta').value = '';
+  loadAuditHistory();
+});
 
 initSidebarControls();
 

@@ -7,6 +7,7 @@ const morgan = require('morgan');
 
 const { testConnection } = require('./config/database');
 const { morganStream } = require('./config/logger');
+const { openApiSpec, renderSwaggerHtml } = require('./config/openapi');
 const { apiLimiter } = require('./middlewares/rateLimiter');
 const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
 const authRoutes = require('./routes/authRoutes');
@@ -65,6 +66,14 @@ app.get('/api/health', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   }
+});
+
+// Documentacion OpenAPI / Swagger UI
+app.get('/api/docs.json', (req, res) => {
+  res.status(200).json(openApiSpec);
+});
+app.get('/api/docs', (req, res) => {
+  res.status(200).type('html').send(renderSwaggerHtml());
 });
 
 // Rutas principales

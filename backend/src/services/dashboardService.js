@@ -11,7 +11,8 @@ async function getDashboardSummary() {
 
   const [[rentalStats]] = await pool.query(
     `SELECT SUM(CASE WHEN estado = 'ACTIVO' AND fecha_vencimiento >= NOW() THEN 1 ELSE 0 END) AS alquileres_activos,
-            SUM(CASE WHEN estado = 'ACTIVO' AND fecha_vencimiento < NOW() THEN 1 ELSE 0 END) AS alquileres_vencidos
+            SUM(CASE WHEN estado = 'ACTIVO' AND fecha_vencimiento < NOW() THEN 1 ELSE 0 END) AS alquileres_vencidos,
+            COALESCE(SUM(multa), 0) AS total_multas
      FROM prestamos_alquileres`
   );
 
@@ -65,6 +66,7 @@ async function getDashboardSummary() {
       pedidos_pendientes: Number(salesStats.pedidos_pendientes) || 0,
       alquileres_activos: Number(rentalStats.alquileres_activos) || 0,
       alquileres_vencidos: Number(rentalStats.alquileres_vencidos) || 0,
+      total_multas: Number(rentalStats.total_multas) || 0,
       total_libros: Number(catalogStats.total_libros) || 0,
       total_usuarios: Number(catalogStats.total_usuarios) || 0
     },
@@ -114,6 +116,27 @@ async function exportCsvReport(type) {
     rows = data.map((r) => [
       new Date(r.creado_en).toISOString(), r.titulo, r.tipo_movimiento,
       r.cantidad, r.stock_anterior, r.stock_nuevo, r.motivo || ''
+    ]);
+  } else if (type === 'rentals') {
+    headers = ['Orden', 'Libro', 'Formato', 'Cliente', 'Correo', 'Inicio', 'Vencimiento', 'Devolucion Real', 'Estado', 'Multa COP', 'Observaciones'];
+    const [data] = await pool.query(
+      `SELECT p.numero_orden, l.titulo, f.codigo AS formato, CONCAT(u.nombre, ' ', u.apellido) AS cliente,
+              u.email, pa.fecha_inicio, pa.fecha_vencimiento, pa.fecha_devolucion_real,
+              CASE WHEN pa.estado = 'ACTIVO' AND pa.fecha_vencimiento < NOW() THEN 'VENCIDO' ELSE pa.estado END AS estado_efectivo,
+              pa.multa, pa.observaciones
+       FROM prestamos_alquileres pa
+       INNER JOIN usuarios u ON pa.usuario_id = u.id
+       INNER JOIN libros l ON pa.libro_id = l.id
+       INNER JOIN formatos f ON l.formato_id = f.id
+       LEFT JOIN pedidos p ON pa.pedido_id = p.id
+       ORDER BY pa.fecha_inicio DESC`
+    );
+    rows = data.map((r) => [
+      r.numero_orden || '-', r.titulo, r.formato, r.cliente, r.email,
+      new Date(r.fecha_inicio).toISOString(),
+      new Date(r.fecha_vencimiento).toISOString(),
+      r.fecha_devolucion_real ? new Date(r.fecha_devolucion_real).toISOString() : '-',
+      r.estado_efectivo, Number(r.multa) || 0, r.observaciones || ''
     ]);
   } else if (type === 'audit') {
     headers = ['Fecha', 'Usuario', 'Accion', 'Entidad', 'IP'];

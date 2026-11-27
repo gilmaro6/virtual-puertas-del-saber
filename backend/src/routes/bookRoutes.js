@@ -1,6 +1,7 @@
 const express = require('express');
 const bookController = require('../controllers/bookController');
 const { verifyToken, requirePermission } = require('../middlewares/authMiddleware');
+const { validateBookPayload } = require('../middlewares/validators');
 
 const router = express.Router();
 
@@ -36,8 +37,8 @@ router.delete('/formats/:id', verifyToken, requirePermission('PARAMETRIZACION_GE
 
 // Administracion de libros
 router.post('/upload-cover', verifyToken, requirePermission('CATALOGO_CREAR', 'CATALOGO_EDITAR'), bookController.uploadCover);
-router.post('/', verifyToken, requirePermission('CATALOGO_CREAR'), bookController.createBook);
-router.put('/:id', verifyToken, requirePermission('CATALOGO_EDITAR'), bookController.updateBook);
+router.post('/', verifyToken, requirePermission('CATALOGO_CREAR'), validateBookPayload, bookController.createBook);
+router.put('/:id', verifyToken, requirePermission('CATALOGO_EDITAR'), validateBookPayload, bookController.updateBook);
 router.delete('/:id', verifyToken, requirePermission('CATALOGO_ELIMINAR'), bookController.deleteBook);
 
 module.exports = router;

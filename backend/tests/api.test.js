@@ -5,6 +5,14 @@ const { requirePermission } = require('../src/middlewares/authMiddleware');
 const { validatePaymentDetails } = require('../src/services/orderService');
 const { generateCaptcha } = require('../src/services/authService');
 const { calculateCouponDiscount } = require('../src/services/couponService');
+const {
+  validateRegister,
+  validateResetPassword,
+  validateBookPayload,
+  validateOrderPayload,
+  validateCouponPayload
+} = require('../src/middlewares/validators');
+const { openApiSpec } = require('../src/config/openapi');
 
 test('requirePermission permite acceso cuando el usuario tiene el permiso', () => {
   const middleware = requirePermission('DASHBOARD_VER');
@@ -101,4 +109,57 @@ test('calculateCouponDiscount rechaza cupon cuando no alcanza monto minimo o est
     fecha_expiracion: '2020-01-01T00:00:00.000Z'
   };
   assert.throws(() => calculateCouponDiscount(expiredCoupon, 40000), (err) => err.statusCode === 400);
+});
+
+test('validateRegister rechaza correo invalido o contrasena corta', () => {
+  let err;
+  validateRegister({ body: { nombre: 'Ana', apellido: 'Ruiz', email: 'correo-malo', password: '123' } }, {}, (e) => {
+    err = e;
+  });
+  assert.ok(err);
+  assert.equal(err.statusCode, 400);
+});
+
+test('validateResetPassword exige codigo numerico de 6 digitos', () => {
+  let err;
+  validateResetPassword({ body: { email: 'ana@correo.com', codigo: 'abc', nuevaContrasena: 'password123' } }, {}, (e) => {
+    err = e;
+  });
+  assert.ok(err);
+  assert.equal(err.statusCode, 400);
+});
+
+test('validateBookPayload rechaza precios negativos en creacion de libro', () => {
+  let err;
+  validateBookPayload({ method: 'POST', body: { titulo: 'Libro Prueba', precio_venta: -5000 } }, {}, (e) => {
+    err = e;
+  });
+  assert.ok(err);
+  assert.equal(err.statusCode, 400);
+});
+
+test('validateOrderPayload rechaza metodos de pago no soportados', () => {
+  let err;
+  validateOrderPayload({ body: { metodo_pago: 'BITCOIN' } }, {}, (e) => {
+    err = e;
+  });
+  assert.ok(err);
+  assert.equal(err.statusCode, 400);
+});
+
+test('validateCouponPayload rechaza porcentaje mayor a 100', () => {
+  let err;
+  validateCouponPayload({ body: { codigo: 'MEGA200', tipo: 'PORCENTAJE', valor: 150 } }, {}, (e) => {
+    err = e;
+  });
+  assert.ok(err);
+  assert.equal(err.statusCode, 400);
+});
+
+test('openApiSpec define version 3.0.3 y documenta endpoints principales', () => {
+  assert.equal(openApiSpec.openapi, '3.0.3');
+  assert.ok(openApiSpec.paths['/books']);
+  assert.ok(openApiSpec.paths['/orders']);
+  assert.ok(openApiSpec.paths['/coupons/validate']);
+  assert.ok(openApiSpec.paths['/orders/reader/{bookId}/progress']);
 });

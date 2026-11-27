@@ -355,12 +355,23 @@ async function updateOrderStatus(orderId, { estado, comentario = null }, adminId
     throw new AppError('Estado de pedido invalido', 400);
   }
 
-  const [rows] = await pool.query('SELECT id, estado FROM pedidos WHERE id = ?', [orderId]);
+  const [rows] = await pool.query('SELECT id, numero_orden, estado FROM pedidos WHERE id = ?', [orderId]);
   if (rows.length === 0) {
     throw new AppError('Pedido no encontrado', 404);
   }
 
-  const estadoAnterior = rows[0].estado;
+  const orderRow = rows[0];
+  const estadoAnterior = orderRow.estado;
+
+  if (estadoAnterior === estado) {
+    return getOrderById(orderId, adminId, 'ADMIN');
+  }
+
+  if (estadoAnterior === 'CANCELADO') {
+    throw new AppError('Un pedido cancelado no puede cambiar de estado nuevamente', 400);
+  }
+
+  let reversedItemsCount = 0;
 
   const connection = await pool.getConnection();
   try {
@@ -370,8 +381,67 @@ async function updateOrderStatus(orderId, { estado, comentario = null }, adminId
     await connection.query(
       `INSERT INTO historial_estados_pedido (id, pedido_id, estado_anterior, estado_nuevo, cambiado_por, comentario)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [uuidv4(), orderId, estadoAnterior, estado, adminId, comentario]
+      [
+        uuidv4(),
+        orderId,
+        estadoAnterior,
+        estado,
+        adminId,
+        comentario || (estado === 'CANCELADO' ? 'Cancelacion con reversion automatica de inventario' : 'Actualizacion de estado')
+      ]
     );
+
+    if (estado === 'CANCELADO') {
+      const [details] = await connection.query(
+        `SELECT dp.libro_id, dp.cantidad, dp.tipo_operacion, l.stock_fisico, l.estado AS libro_estado, f.requiere_stock
+         FROM detalle_pedidos dp
+         INNER JOIN libros l ON dp.libro_id = l.id
+         INNER JOIN formatos f ON l.formato_id = f.id
+         WHERE dp.pedido_id = ?
+         FOR UPDATE`,
+        [orderId]
+      );
+
+      for (const item of details) {
+        if (item.requiere_stock) {
+          const nuevoStock = Number(item.stock_fisico) + Number(item.cantidad);
+          const nextBookState = item.libro_estado === 'DESCONTINUADO' ? 'DESCONTINUADO' : 'DISPONIBLE';
+          await connection.query(
+            'UPDATE libros SET stock_fisico = ?, estado = ? WHERE id = ?',
+            [nuevoStock, nextBookState, item.libro_id]
+          );
+          await connection.query(
+            `INSERT INTO movimientos_inventario (id, libro_id, usuario_id, tipo_movimiento, cantidad, stock_anterior, stock_nuevo, motivo)
+             VALUES (?, ?, ?, 'DEVOLUCION', ?, ?, ?, ?)`,
+            [
+              uuidv4(),
+              item.libro_id,
+              adminId,
+              item.cantidad,
+              item.stock_fisico,
+              nuevoStock,
+              `Reversion por cancelacion de pedido ${orderRow.numero_orden}`
+            ]
+          );
+          reversedItemsCount += Number(item.cantidad);
+        }
+      }
+
+      await connection.query(
+        `UPDATE prestamos_alquileres
+         SET estado = 'DEVUELTO', fecha_devolucion_real = NOW(),
+             observaciones = CONCAT(COALESCE(observaciones, ''), ' [Anulado por cancelacion de pedido]')
+         WHERE pedido_id = ? AND estado != 'DEVUELTO'`,
+        [orderId]
+      );
+
+      await connection.query(
+        `UPDATE pagos
+         SET estado = CASE WHEN estado = 'APROBADO' THEN 'REEMBOLSADO' ELSE 'RECHAZADO' END
+         WHERE pedido_id = ?`,
+        [orderId]
+      );
+    }
 
     await connection.commit();
   } catch (error) {
@@ -386,7 +456,12 @@ async function updateOrderStatus(orderId, { estado, comentario = null }, adminId
     accion: 'CAMBIAR_ESTADO_PEDIDO',
     entidad: 'pedidos',
     entidadId: orderId,
-    detalle: { estado_anterior: estadoAnterior, estado_nuevo: estado },
+    detalle: {
+      numero_orden: orderRow.numero_orden,
+      estado_anterior: estadoAnterior,
+      estado_nuevo: estado,
+      unidades_revertidas: reversedItemsCount
+    },
     ipOrigen
   });
 
@@ -504,6 +579,110 @@ async function returnRental(rentalId, { observaciones = null, multa = undefined 
   return updated[0];
 }
 
+async function adjustInventory({ libro_id, tipo = 'ENTRADA', cantidad, motivo }, adminId, ipOrigen) {
+  const qty = Math.floor(Number(cantidad));
+  if (!libro_id) {
+    throw new AppError('Debes seleccionar un libro', 400);
+  }
+  if (Number.isNaN(qty) || qty <= 0) {
+    throw new AppError('La cantidad debe ser un numero entero mayor a 0', 400);
+  }
+  if (!motivo || String(motivo).trim().length < 4) {
+    throw new AppError('Ingresa un motivo descriptivo (min. 4 caracteres)', 400);
+  }
+
+  const normalizedType = String(tipo).toUpperCase();
+  if (!['ENTRADA', 'SALIDA', 'DEVOLUCION'].includes(normalizedType)) {
+    throw new AppError('Tipo de movimiento invalido', 400);
+  }
+
+  const connection = await pool.getConnection();
+  let resultInfo;
+
+  try {
+    await connection.beginTransaction();
+
+    const [rows] = await connection.query(
+      `SELECT l.id, l.titulo, l.stock_fisico, l.estado, f.requiere_stock
+       FROM libros l
+       INNER JOIN formatos f ON l.formato_id = f.id
+       WHERE l.id = ?
+       FOR UPDATE`,
+      [libro_id]
+    );
+
+    if (rows.length === 0) {
+      throw new AppError('Libro no encontrado', 404);
+    }
+
+    const book = rows[0];
+    if (!book.requiere_stock) {
+      throw new AppError('Este libro es exclusivamente digital y no maneja inventario fisico', 400);
+    }
+
+    const stockAnterior = Number(book.stock_fisico) || 0;
+    let stockNuevo = stockAnterior;
+    let dbMovementType = normalizedType;
+
+    if (normalizedType === 'SALIDA') {
+      if (stockAnterior < qty) {
+        throw new AppError(`No puedes descontar ${qty} unidades; stock disponible: ${stockAnterior}`, 400);
+      }
+      stockNuevo = stockAnterior - qty;
+      dbMovementType = 'AJUSTE';
+    } else {
+      stockNuevo = stockAnterior + qty;
+    }
+
+    const nextState = book.estado === 'DESCONTINUADO'
+      ? 'DESCONTINUADO'
+      : stockNuevo === 0
+        ? 'AGOTADO'
+        : 'DISPONIBLE';
+
+    await connection.query(
+      'UPDATE libros SET stock_fisico = ?, estado = ? WHERE id = ?',
+      [stockNuevo, nextState, libro_id]
+    );
+
+    const movementReason = normalizedType === 'SALIDA'
+      ? `Salida manual: ${String(motivo).trim()}`
+      : String(motivo).trim();
+
+    await connection.query(
+      `INSERT INTO movimientos_inventario (id, libro_id, usuario_id, tipo_movimiento, cantidad, stock_anterior, stock_nuevo, motivo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [uuidv4(), libro_id, adminId, dbMovementType, qty, stockAnterior, stockNuevo, movementReason]
+    );
+
+    await connection.commit();
+    resultInfo = {
+      libro_id,
+      titulo: book.titulo,
+      tipo: normalizedType,
+      cantidad: qty,
+      stock_anterior: stockAnterior,
+      stock_nuevo: stockNuevo
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+
+  await logAudit({
+    usuarioId: adminId,
+    accion: 'MOVIMIENTO_INVENTARIO_MANUAL',
+    entidad: 'libros',
+    entidadId: libro_id,
+    detalle: resultInfo,
+    ipOrigen
+  });
+
+  return resultInfo;
+}
+
 async function getInventoryHistory(limit = 50) {
   const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
   const [rows] = await pool.query(
@@ -518,15 +697,41 @@ async function getInventoryHistory(limit = 50) {
   return rows;
 }
 
-async function getAuditHistory(limit = 50) {
+async function getAuditHistory(queryParams = {}) {
+  const { limit = 50, accion = '', q = '', desde = '', hasta = '' } =
+    typeof queryParams === 'object' && queryParams !== null ? queryParams : { limit: queryParams };
+
   const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  const conditions = [];
+  const params = [];
+
+  if (accion && String(accion).trim()) {
+    conditions.push('a.accion = ?');
+    params.push(String(accion).trim());
+  }
+  if (q && String(q).trim()) {
+    const term = `%${String(q).trim()}%`;
+    conditions.push('(u.email LIKE ? OR a.accion LIKE ? OR a.entidad LIKE ?)');
+    params.push(term, term, term);
+  }
+  if (desde && String(desde).trim()) {
+    conditions.push('DATE(a.creado_en) >= ?');
+    params.push(String(desde).trim());
+  }
+  if (hasta && String(hasta).trim()) {
+    conditions.push('DATE(a.creado_en) <= ?');
+    params.push(String(hasta).trim());
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const [rows] = await pool.query(
     `SELECT a.*, u.email AS usuario_email, u.rol AS usuario_rol
      FROM auditoria_acciones a
      LEFT JOIN usuarios u ON a.usuario_id = u.id
+     ${whereClause}
      ORDER BY a.creado_en DESC
      LIMIT ?`,
-    [safeLimit]
+    [...params, safeLimit]
   );
   return rows;
 }
@@ -788,6 +993,7 @@ module.exports = {
   listAllRentals,
   updateOrderStatus,
   returnRental,
+  adjustInventory,
   getInventoryHistory,
   getAuditHistory
 };

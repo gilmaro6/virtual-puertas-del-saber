@@ -72,6 +72,15 @@ async function returnRental(req, res, next) {
   }
 }
 
+async function adjustInventory(req, res, next) {
+  try {
+    const result = await orderService.adjustInventory(req.body, req.user.id, req.ip);
+    res.status(200).json({ status: 'ok', message: 'Movimiento de inventario registrado correctamente', data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function getInventoryHistory(req, res, next) {
   try {
     const history = await orderService.getInventoryHistory(req.query.limit);
@@ -83,7 +92,7 @@ async function getInventoryHistory(req, res, next) {
 
 async function getAuditHistory(req, res, next) {
   try {
-    const history = await orderService.getAuditHistory(req.query.limit);
+    const history = await orderService.getAuditHistory(req.query);
     res.status(200).json({ status: 'ok', data: history });
   } catch (error) {
     next(error);
@@ -149,6 +158,7 @@ module.exports = {
   listAllRentals,
   updateOrderStatus,
   returnRental,
+  adjustInventory,
   getInventoryHistory,
   getAuditHistory
 };
