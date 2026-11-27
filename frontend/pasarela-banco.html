@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conexion PSE | Libreria Virtual Danzara</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Merriweather:wght@700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --bank-primary: #142D4E;
+      --bank-accent: #F4B942;
+      --bank-text-on-primary: #ffffff;
+    }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: #f3f5f9;
+      color: #1f2937;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .sandbox-ribbon {
+      background: #e8f2ff;
+      color: #142D4E;
+      border-bottom: 1px solid #c9ddf8;
+      font-size: 0.8rem;
+      padding: 0.45rem 1rem;
+      text-align: center;
+      font-weight: 500;
+    }
+    .bank-topbar {
+      background-color: var(--bank-primary);
+      color: var(--bank-text-on-primary);
+      border-bottom: 4px solid var(--bank-accent);
+      padding: 0.9rem 0;
+    }
+    .bank-logo-badge {
+      width: 44px;
+      height: 44px;
+      border-radius: 0.65rem;
+      background: rgba(255, 255, 255, 0.16);
+      border: 2px solid var(--bank-accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1.05rem;
+    }
+    .pse-card {
+      background: #ffffff;
+      border: 1px solid #dde3ec;
+      border-radius: 0.85rem;
+      box-shadow: 0 0.5rem 1.4rem rgba(15, 23, 42, 0.08);
+    }
+    .btn-bank {
+      background-color: var(--bank-primary);
+      border-color: var(--bank-primary);
+      color: var(--bank-text-on-primary);
+      font-weight: 600;
+    }
+    .btn-bank:hover {
+      filter: brightness(0.92);
+      color: var(--bank-text-on-primary);
+    }
+    .portal-link-box {
+      background: #f8fafd;
+      border: 1.5px solid #cbd9ec;
+      border-radius: 0.7rem;
+      padding: 1rem;
+    }
+    .processing-mask {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.75);
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .processing-mask.show {
+      display: flex;
+    }
+  </style>
+</head>
+<body>
+  <div class="sandbox-ribbon">
+    <i class="bi bi-shield-check text-primary"></i>
+    <strong>Redireccion a portal oficial de la entidad bancaria:</strong> El enlace externo abre la pagina oficial del banco solo con fines de demostracion academica (no realiza cobros reales).
+  </div>
+
+  <header class="bank-topbar shadow-sm">
+    <div class="container d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div class="d-flex align-items-center gap-3">
+        <div class="bank-logo-badge" id="bankInitials">PSE</div>
+        <div>
+          <div class="fw-bold fs-5 lh-sm" id="bankPortalTitle">Conexion Bancaria PSE</div>
+          <div class="small opacity-75" id="bankPortalSubtitle">Enlace a entidad financiera · ACH Colombia</div>
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-2 small">
+        <span class="badge bg-light text-dark px-2 py-1"><i class="bi bi-box-arrow-up-right text-primary"></i> Portal Externo Oficial</span>
+        <span class="badge bg-dark px-2 py-1">PSE · COL</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="container my-4 flex-grow-1">
+    <div class="row justify-content-center">
+      <div class="col-lg-10 col-xl-9">
+        <div id="bankAlert"></div>
+
+        <div class="row g-4">
+          <!-- Resumen de la transaccion -->
+          <div class="col-md-5">
+            <div class="pse-card p-3 p-md-4 h-100">
+              <div class="d-flex align-items-center gap-2 border-bottom pb-3 mb-3">
+                <img src="assets/images/logo-danzara.jpg" alt="Danzara" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid #F4B942;">
+                <div>
+                  <div class="small text-muted">Comercio solicitante</div>
+                  <div class="fw-bold">Libreria Virtual Danzara</div>
+                </div>
+              </div>
+
+              <div class="small">
+                <div class="d-flex justify-content-between py-2 border-bottom">
+                  <span class="text-muted">NIT Comercio</span>
+                  <strong>901.450.320-1</strong>
+                </div>
+                <div class="d-flex justify-content-between py-2 border-bottom">
+                  <span class="text-muted">Referencia CUS</span>
+                  <strong class="text-primary" id="pseCusCode">CUS-00000000</strong>
+                </div>
+                <div class="d-flex justify-content-between py-2 border-bottom">
+                  <span class="text-muted">Entidad elegida</span>
+                  <strong id="pseBankName">-</strong>
+                </div>
+                <div class="d-flex justify-content-between py-2 border-bottom">
+                  <span class="text-muted">Pagador</span>
+                  <strong id="psePayerDoc">-</strong>
+                </div>
+                <div class="d-flex justify-content-between py-2 border-bottom">
+                  <span class="text-muted">Correo PSE</span>
+                  <span class="text-truncate ms-2" id="psePayerEmail">-</span>
+                </div>
+                <div class="d-flex justify-content-between py-2 border-bottom">
+                  <span class="text-muted">Concepto</span>
+                  <span id="pseConcept">Compra / Alquiler de libros</span>
+                </div>
+              </div>
+
+              <div class="mt-3 p-3 rounded text-center" style="background: #f4f7fb; border: 1px solid #dce4f0;">
+                <div class="small text-muted text-uppercase fw-semibold">Valor de la orden</div>
+                <div class="fs-3 fw-bold" style="color: #142D4E;" id="pseAmount">$0</div>
+                <div class="small text-muted">COP · IVA $0 (Exento Art. 478 E.T.)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Redireccion al portal oficial real del banco + retorno -->
+          <div class="col-md-7">
+            <div class="pse-card p-3 p-md-4 h-100 d-flex flex-column justify-content-between">
+              <div>
+                <div class="d-flex align-items-center gap-2 mb-2">
+                  <span class="badge bg-success"><i class="bi bi-check-circle"></i> Redireccion lista</span>
+                  <span class="small text-muted">Esperando retorno del portal bancario</span>
+                </div>
+                <h5 class="fw-bold mb-2">Acceso al Portal Oficial de <span id="bankNameHeading">tu Banco</span></h5>
+                <p class="small text-muted mb-3">
+                  Se abrio la pagina oficial de ingreso de la entidad seleccionada en una nueva pestaña para validar el acceso bancario real. Si tu navegador bloqueo la pestaña emergente, abre el enlace oficial directamente abajo:
+                </p>
+
+                <div class="portal-link-box mb-3">
+                  <div class="small text-muted mb-1">URL oficial de la entidad financiera:</div>
+                  <div class="fw-semibold small text-break mb-3">
+                    <i class="bi bi-lock-fill text-success"></i>
+                    <a href="#" target="_blank" rel="noopener noreferrer" id="officialBankUrlLink">https://...</a>
+                  </div>
+                  <div class="d-flex flex-wrap gap-2">
+                    <a href="#" target="_blank" rel="noopener noreferrer" class="btn btn-bank btn-sm" id="openOfficialBankBtn">
+                      <i class="bi bi-box-arrow-up-right"></i> Abrir portal de <span id="openBankBtnName">Banco</span>
+                    </a>
+                    <a href="https://www.pse.com.co/persona" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm">
+                      <i class="bi bi-globe2"></i> Portal oficial PSE
+                    </a>
+                  </div>
+                </div>
+
+                <div class="alert alert-light border small mb-3">
+                  <i class="bi bi-info-circle text-primary"></i>
+                  Al regresar de la pagina del banco, confirma abajo el resultado de prueba para registrar el pedido y emitir tu factura comercial <strong>FV-XXXX</strong> en Danzara.
+                </div>
+              </div>
+
+              <div class="d-grid gap-2 pt-2 border-top">
+                <button type="button" class="btn btn-success py-2 fw-semibold" id="approvePseBtn">
+                  <i class="bi bi-check2-circle"></i> Confirmar pago aprobado y generar factura (<span id="approvePseAmount">$0</span>)
+                </button>
+                <div class="row g-2">
+                  <div class="col-6">
+                    <button type="button" class="btn btn-outline-danger btn-sm w-100" id="rejectPseBtn">
+                      <i class="bi bi-x-octagon"></i> Simular rechazo del banco
+                    </button>
+                  </div>
+                  <div class="col-6">
+                    <button type="button" class="btn btn-outline-secondary btn-sm w-100" id="cancelPseBtn">
+                      <i class="bi bi-arrow-left"></i> Volver al carrito
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Mascara de confirmacion -->
+  <div class="processing-mask" id="bankProcessingMask">
+    <div class="bg-white rounded-3 p-4 text-center shadow" style="max-width: 380px; width: 100%;">
+      <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;"></div>
+      <h5 class="fw-bold mb-1" id="maskTitle">Registrando confirmacion PSE...</h5>
+      <p class="small text-muted mb-0" id="maskSubtitle">Generando orden de compra, actualizando inventario y emitiendo factura FV-XXXX...</p>
+    </div>
+  </div>
+
+  <footer class="py-3 text-center small text-muted border-top bg-white">
+    Libreria Virtual Danzara · Enlace demostrativo a portales bancarios oficiales (PSE Colombia)
+  </footer>
+
+  <script src="js/api.js?v=14"></script>
+  <script src="js/pasarela-banco.js?v=14"></script>
+</body>
+</html>

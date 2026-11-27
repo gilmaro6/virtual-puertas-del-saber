@@ -13,6 +13,7 @@ const PAGE_LIMIT = 8;
 let favoriteBookIds = new Set();
 let searchDebounceTimer = null;
 let currentCartSubtotal = 0;
+let currentCartItems = [];
 let appliedCoupon = null;
 
 function showAlert(message, type = 'info', target = alertContainer) {
@@ -297,6 +298,29 @@ async function loadBooks() {
   }
 }
 
+function getCurrentNetTotal() {
+  const desc = appliedCoupon && currentCartSubtotal > 0
+    ? Math.min(Number(appliedCoupon.descuento) || 0, currentCartSubtotal)
+    : 0;
+  return { desc, netTotal: Math.max(currentCartSubtotal - desc, 0) };
+}
+
+function updateInstallmentHint() {
+  const hintEl = document.getElementById('installmentHint');
+  const cuotasEl = document.getElementById('cardCuotas');
+  if (!hintEl || !cuotasEl) return;
+  const { netTotal } = getCurrentNetTotal();
+  const cuotas = Math.max(Number(cuotasEl.value) || 1, 1);
+  if (netTotal <= 0) {
+    hintEl.textContent = '';
+    return;
+  }
+  const perMonth = Math.round(netTotal / cuotas);
+  hintEl.textContent = cuotas === 1
+    ? `Pago unico de ${formatCurrency(netTotal)} sin intereses.`
+    : `${cuotas} cuotas estimadas de ${formatCurrency(perMonth)} / mes.`;
+}
+
 function updateCartTotalsUI() {
   const subtotalEl = document.getElementById('cartSubtotal');
   const discountRow = document.getElementById('cartDiscountRow');
@@ -304,19 +328,36 @@ function updateCartTotalsUI() {
   const totalEl = document.getElementById('cartTotal');
   const removeBtn = document.getElementById('removeCouponBtn');
 
-  subtotalEl.textContent = formatCurrency(currentCartSubtotal);
+  const coSubtotal = document.getElementById('coSubtotal');
+  const coDiscountRow = document.getElementById('coDiscountRow');
+  const coDiscountVal = document.getElementById('coDiscountValue');
+  const coTotal = document.getElementById('coTotal');
+  const checkoutBtnAmount = document.getElementById('checkoutBtnAmount');
+  const openCheckoutBtn = document.getElementById('openCheckoutModalBtn');
 
-  if (appliedCoupon && currentCartSubtotal > 0) {
-    const desc = Math.min(Number(appliedCoupon.descuento) || 0, currentCartSubtotal);
+  const { desc, netTotal } = getCurrentNetTotal();
+
+  subtotalEl.textContent = formatCurrency(currentCartSubtotal);
+  if (coSubtotal) coSubtotal.textContent = formatCurrency(currentCartSubtotal);
+
+  if (desc > 0) {
     discountRow.classList.remove('d-none');
     discountVal.textContent = `- ${formatCurrency(desc)}`;
-    totalEl.textContent = formatCurrency(Math.max(currentCartSubtotal - desc, 0));
     removeBtn.classList.remove('d-none');
+    if (coDiscountRow) coDiscountRow.classList.remove('d-none');
+    if (coDiscountVal) coDiscountVal.textContent = `- ${formatCurrency(desc)}`;
   } else {
     discountRow.classList.add('d-none');
-    totalEl.textContent = formatCurrency(currentCartSubtotal);
     removeBtn.classList.add('d-none');
+    if (coDiscountRow) coDiscountRow.classList.add('d-none');
   }
+
+  totalEl.textContent = formatCurrency(netTotal);
+  if (coTotal) coTotal.textContent = formatCurrency(netTotal);
+  if (checkoutBtnAmount) checkoutBtnAmount.textContent = formatCurrency(netTotal);
+  if (openCheckoutBtn) openCheckoutBtn.disabled = currentCartItems.length === 0;
+
+  updateInstallmentHint();
 }
 
 function clearAppliedCoupon() {
@@ -334,6 +375,7 @@ async function loadCart() {
     badge.textContent = '0';
     container.innerHTML = '<p class="text-muted">Inicia sesion para gestionar tu carrito.</p>';
     currentCartSubtotal = 0;
+    currentCartItems = [];
     clearAppliedCoupon();
     return;
   }
@@ -343,6 +385,7 @@ async function loadCart() {
     const { items, total } = res.data;
     badge.textContent = items.reduce((acc, item) => acc + item.cantidad, 0);
     currentCartSubtotal = Number(total) || 0;
+    currentCartItems = items || [];
 
     if (items.length === 0) {
       container.innerHTML = '<p class="text-muted text-center my-4">Tu carrito esta vacio.</p>';
@@ -799,7 +842,7 @@ document.getElementById('openFavoritesBtn').addEventListener('click', (e) => {
   openFavoritesModal();
 });
 
-// --- Pasarela de Pagos ---
+// --- Pasarela de Pagos Profesional ---
 
 const paymentMethods = ['TARJETA', 'PSE', 'TRANSFERENCIA', 'EFECTIVO'];
 let currentPayIndex = 0;
@@ -809,8 +852,7 @@ function selectPaymentMethod(method) {
   document.getElementById('paymentMethod').value = method;
 
   document.querySelectorAll('.pay-slide-btn').forEach((btn) => {
-    const active = btn.dataset.method === method;
-    btn.className = `btn btn-sm ${active ? 'btn-pds' : 'btn-outline-primary'} flex-fill pay-slide-btn`;
+    btn.classList.toggle('active', btn.dataset.method === method);
   });
 
   document.getElementById('paymentFieldsCard').classList.toggle('d-none', method !== 'TARJETA');
@@ -818,6 +860,58 @@ function selectPaymentMethod(method) {
   document.getElementById('paymentFieldsTransfer').classList.toggle('d-none', method !== 'TRANSFERENCIA');
   document.getElementById('paymentFieldsCash').classList.toggle('d-none', method !== 'EFECTIVO');
 }
+
+function renderCheckoutSummary() {
+  const container = document.getElementById('checkoutSummaryItems');
+  if (!container) return;
+
+  container.innerHTML = currentCartItems.map((item) => `
+    <div class="d-flex justify-content-between align-items-center gap-2 py-2 border-bottom small">
+      <div class="min-w-0">
+        <div class="fw-semibold text-truncate">${item.titulo}</div>
+        <div class="text-muted">${item.tipo_operacion} &middot; Cant: ${item.cantidad}</div>
+      </div>
+      <strong class="text-nowrap">${formatCurrency(item.subtotal)}</strong>
+    </div>
+  `).join('');
+  updateCartTotalsUI();
+}
+
+document.getElementById('openCheckoutModalBtn').addEventListener('click', () => {
+  if (!getToken()) {
+    bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('cartOffcanvas')).hide();
+    new bootstrap.Modal(document.getElementById('authModal')).show();
+    return;
+  }
+  if (currentCartItems.length === 0) {
+    showAlert('Agrega al menos un libro antes de ir al pago.', 'warning');
+    return;
+  }
+
+  document.getElementById('checkoutAlert').innerHTML = '';
+  const user = getStoredUser();
+  if (user) {
+    const holderEl = document.getElementById('cardHolder');
+    const pseEmailEl = document.getElementById('pseEmail');
+    if (holderEl && !holderEl.value.trim()) {
+      holderEl.value = `${user.nombre || ''} ${user.apellido || ''}`.trim().toUpperCase();
+      document.getElementById('ccPreviewHolder').textContent = holderEl.value || 'NOMBRE DEL TITULAR';
+    }
+    if (pseEmailEl && !pseEmailEl.value.trim()) {
+      pseEmailEl.value = user.email || '';
+    }
+  }
+
+  renderCheckoutSummary();
+  const offcanvas = bootstrap.Offcanvas.getInstance(document.getElementById('cartOffcanvas'));
+  if (offcanvas) offcanvas.hide();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('checkoutModal')).show();
+});
+
+document.getElementById('backToCartBtn').addEventListener('click', () => {
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('checkoutModal')).hide();
+  bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('cartOffcanvas')).show();
+});
 
 document.querySelectorAll('.pay-slide-btn').forEach((btn) => {
   btn.addEventListener('click', () => selectPaymentMethod(btn.dataset.method));
@@ -829,6 +923,83 @@ document.getElementById('prevPayBtn').addEventListener('click', () => {
 document.getElementById('nextPayBtn').addEventListener('click', () => {
   currentPayIndex = (currentPayIndex + 1) % paymentMethods.length;
   selectPaymentMethod(paymentMethods[currentPayIndex]);
+});
+
+// Interactividad en vivo de la tarjeta bancaria 3D
+document.getElementById('cardNumber').addEventListener('input', (e) => {
+  const digits = e.target.value.replace(/\D/g, '').slice(0, 16);
+  const formatted = digits.replace(/(\d{4})(?=\d)/g, '$1 ');
+  e.target.value = formatted;
+
+  const padded = digits.padEnd(16, '•').replace(/(.{4})(?=.)/g, '$1 ');
+  document.getElementById('ccPreviewNumber').textContent = padded;
+
+  const brandBadge = document.getElementById('ccBrandBadge');
+  if (digits.startsWith('4')) {
+    brandBadge.textContent = 'VISA';
+  } else if (digits.startsWith('5')) {
+    brandBadge.textContent = 'MASTERCARD';
+  } else if (digits.startsWith('3')) {
+    brandBadge.textContent = 'AMEX';
+  } else {
+    brandBadge.textContent = 'TARJETA';
+  }
+});
+
+document.getElementById('cardHolder').addEventListener('input', (e) => {
+  const val = e.target.value.trim().toUpperCase();
+  document.getElementById('ccPreviewHolder').textContent = val || 'NOMBRE DEL TITULAR';
+});
+
+document.getElementById('cardExp').addEventListener('input', (e) => {
+  const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
+  const formatted = digits.length >= 3 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
+  e.target.value = formatted;
+  document.getElementById('ccPreviewExp').textContent = formatted || 'MM/AA';
+});
+
+document.getElementById('cardCuotas').addEventListener('change', updateInstallmentHint);
+
+function fillTestCard(number, holder, exp, cvv) {
+  const numInput = document.getElementById('cardNumber');
+  const holderInput = document.getElementById('cardHolder');
+  const expInput = document.getElementById('cardExp');
+  const cvvInput = document.getElementById('cardCvv');
+
+  numInput.value = number;
+  holderInput.value = holder;
+  expInput.value = exp;
+  cvvInput.value = cvv;
+
+  numInput.dispatchEvent(new Event('input'));
+  holderInput.dispatchEvent(new Event('input'));
+  expInput.dispatchEvent(new Event('input'));
+}
+
+document.getElementById('fillVisaTestBtn').addEventListener('click', () => {
+  const user = getStoredUser();
+  const name = user ? `${user.nombre} ${user.apellido}`.trim().toUpperCase() : 'CLIENTE PRUEBA VISA';
+  fillTestCard('4111111111114242', name, '1229', '123');
+});
+
+document.getElementById('fillMasterTestBtn').addEventListener('click', () => {
+  const user = getStoredUser();
+  const name = user ? `${user.nombre} ${user.apellido}`.trim().toUpperCase() : 'CLIENTE PRUEBA MASTER';
+  fillTestCard('5500000000005555', name, '1028', '456');
+});
+
+document.getElementById('copyBankAccountBtn').addEventListener('click', async () => {
+  const text = document.getElementById('bankAccountText').textContent.trim();
+  const btn = document.getElementById('copyBankAccountBtn');
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.innerHTML = '<i class="bi bi-check-lg"></i> Copiado';
+    setTimeout(() => {
+      btn.innerHTML = '<i class="bi bi-clipboard"></i> Copiar cuenta';
+    }, 2000);
+  } catch {
+    showAlert(`Cuenta bancaria: ${text}`, 'info');
+  }
 });
 
 document.getElementById('applyCouponBtn').addEventListener('click', async () => {
@@ -864,63 +1035,253 @@ document.getElementById('applyCouponBtn').addEventListener('click', async () => 
 
 document.getElementById('removeCouponBtn').addEventListener('click', clearAppliedCoupon);
 
+let pendingCardPayload = null;
+let currentThreeDsOtp = '';
+
+async function finalizeOrderSubmission(payload) {
+  const checkoutAlert = document.getElementById('checkoutAlert');
+  const overlay = document.getElementById('checkoutProcessingOverlay');
+  const procTitle = document.getElementById('processingTitle');
+  const procSub = document.getElementById('processingSubtitle');
+
+  overlay.classList.remove('d-none');
+  procTitle.textContent = 'Aprobando transaccion...';
+  procSub.textContent = 'Registrando pedido, descontando inventario y generando factura FV-XXXX...';
+
+  try {
+    await new Promise((r) => setTimeout(r, 750));
+    const res = await apiRequest('/orders', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    overlay.classList.add('d-none');
+    clearAppliedCoupon();
+    document.getElementById('checkoutForm').reset();
+    document.getElementById('ccPreviewNumber').textContent = '•••• •••• •••• ••••';
+    document.getElementById('ccPreviewHolder').textContent = 'NOMBRE DEL TITULAR';
+    document.getElementById('ccPreviewExp').textContent = 'MM/AA';
+    document.getElementById('ccBrandBadge').textContent = 'TARJETA';
+    selectPaymentMethod('TARJETA');
+
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('checkoutModal')).hide();
+    await loadCart();
+    await loadBooks();
+
+    const refInfo = res.data.pago && res.data.pago.referencia_transaccion
+      ? `<br><span class="small text-muted">Referencia: <strong>${res.data.pago.referencia_transaccion}</strong> · Metodo: <strong>${res.data.pago.metodo_pago}</strong></span>`
+      : '';
+    document.getElementById('orderSuccessMessage').innerHTML =
+      `Tu pedido <strong>${res.data.numero_orden}</strong> fue aprobado por <strong>${formatCurrency(res.data.total)}</strong>.${refInfo}`;
+    document.getElementById('orderSuccessInvoiceLink').href = `factura.html?orderId=${res.data.id}`;
+    new bootstrap.Modal(document.getElementById('orderSuccessModal')).show();
+  } catch (error) {
+    overlay.classList.add('d-none');
+    showAlert(error.message, 'danger', checkoutAlert);
+  }
+}
+
+function openThreeDsChallenge(payload) {
+  pendingCardPayload = payload;
+  currentThreeDsOtp = String(Math.floor(100000 + Math.random() * 900000));
+
+  const rawNum = String(payload.datos_pago.numero_tarjeta || '').replace(/\D/g, '');
+  const brand = rawNum.startsWith('4')
+    ? 'Verified by VISA · 3D Secure'
+    : rawNum.startsWith('5')
+      ? 'Mastercard ID Check · 3D Secure'
+      : 'Verificacion Bancaria 3D Secure';
+
+  const { netTotal } = getCurrentNetTotal();
+  document.getElementById('threeDsBrandTitle').innerHTML = `<i class="bi bi-shield-lock-fill text-warning"></i> ${brand}`;
+  document.getElementById('threeDsMaskedCard').textContent = `•••• •••• •••• ${rawNum.slice(-4)}`;
+  document.getElementById('threeDsAmount').textContent = formatCurrency(netTotal);
+  document.getElementById('threeDsDemoOtp').textContent = currentThreeDsOtp;
+  document.getElementById('threeDsOtpInput').value = '';
+  document.getElementById('threeDsAlert').innerHTML = '';
+
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('threeDsModal')).show();
+}
+
+document.getElementById('autofillThreeDsBtn').addEventListener('click', () => {
+  document.getElementById('threeDsOtpInput').value = currentThreeDsOtp;
+});
+
+document.getElementById('confirmThreeDsBtn').addEventListener('click', async () => {
+  const entered = document.getElementById('threeDsOtpInput').value.trim();
+  if (entered !== currentThreeDsOtp) {
+    showAlert('Codigo 3D Secure incorrecto. Ingresa los 6 digitos de prueba.', 'danger', document.getElementById('threeDsAlert'));
+    return;
+  }
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('threeDsModal')).hide();
+  if (pendingCardPayload) {
+    const toSend = pendingCardPayload;
+    pendingCardPayload = null;
+    await finalizeOrderSubmission(toSend);
+  }
+});
+
+document.getElementById('rejectThreeDsBtn').addEventListener('click', () => {
+  pendingCardPayload = null;
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('threeDsModal')).hide();
+  showAlert(
+    'Transaccion rechazada en verificacion 3D Secure por el banco emisor (simulacion). Puedes intentar con otra tarjeta o metodo de pago.',
+    'danger',
+    document.getElementById('checkoutAlert')
+  );
+});
+
 document.getElementById('checkoutForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const checkoutAlert = document.getElementById('checkoutAlert');
+  checkoutAlert.innerHTML = '';
+
   if (!getToken()) {
-    showAlert('Debes iniciar sesion para confirmar un pedido.', 'warning');
+    showAlert('Debes iniciar sesion para confirmar un pedido.', 'warning', checkoutAlert);
     return;
   }
 
   const metodo_pago = document.getElementById('paymentMethod').value;
-  let datos_pago = {};
+  const direccion_envio = document.getElementById('shippingAddress').value;
+  const ciudad = document.getElementById('shippingCity').value;
+  const codigo_cupon = appliedCoupon ? appliedCoupon.codigo : null;
+
+  if (metodo_pago === 'PSE') {
+    const banco = document.getElementById('pseBank').value;
+    const tipo_persona = document.getElementById('psePersonType').value;
+    const tipo_documento = document.getElementById('pseDocType').value;
+    const numero_documento = document.getElementById('pseDocNumber').value.trim();
+    const email_pse = document.getElementById('pseEmail').value.trim();
+
+    if (!banco || !numero_documento || !email_pse) {
+      showAlert('Selecciona tu entidad bancaria e ingresa documento y correo registrado en PSE.', 'warning', checkoutAlert);
+      return;
+    }
+
+    const bankUrls = {
+      Bancolombia: 'https://sucursalpersonas.transaccionesbancolombia.com/bancolombia/jump.jsp?cerrarSesion=true',
+      Davivienda: 'https://personas.davivienda.com/',
+      'Banco de Bogota': 'https://virtual.bancodebogota.co/',
+      'BBVA Colombia': 'https://personas.bbvanet.com.co/',
+      'Banco de Occidente': 'https://www.bancodeoccidente.com.co/',
+      Nequi: 'https://www.nequi.com.co/',
+      Daviplata: 'https://www.daviplata.com/'
+    };
+    const officialUrl = bankUrls[banco] || 'https://www.pse.com.co/persona';
+
+    const { netTotal } = getCurrentNetTotal();
+    sessionStorage.setItem('pds_pending_pse', JSON.stringify({
+      metodo_pago: 'PSE',
+      datos_pago: { banco, tipo_persona, tipo_documento, numero_documento, email_pse },
+      codigo_cupon,
+      direccion_envio,
+      ciudad,
+      net_total: netTotal,
+      items_count: currentCartItems.reduce((acc, it) => acc + it.cantidad, 0),
+      cus_preview: `CUS-${Math.floor(10000000 + Math.random() * 90000000)}`
+    }));
+
+    // Abrir la pagina oficial de ingreso de la entidad bancaria en una nueva pestana
+    window.open(officialUrl, '_blank', 'noopener,noreferrer');
+
+    const overlay = document.getElementById('checkoutProcessingOverlay');
+    document.getElementById('processingTitle').textContent = `Abriendo portal oficial de ${banco}...`;
+    document.getElementById('processingSubtitle').textContent = 'Redirigiendo a pantalla de confirmacion de retorno PSE';
+    overlay.classList.remove('d-none');
+
+    setTimeout(() => {
+      window.location.href = 'pasarela-banco.html';
+    }, 600);
+    return;
+  }
 
   if (metodo_pago === 'TARJETA') {
-    datos_pago = {
-      numero_tarjeta: document.getElementById('cardNumber').value,
-      titular: document.getElementById('cardHolder').value,
-      expiracion: document.getElementById('cardExp').value,
-      cvv: document.getElementById('cardCvv').value,
-      cuotas: document.getElementById('cardCuotas').value
-    };
-  } else if (metodo_pago === 'PSE') {
-    datos_pago = {
-      banco: document.getElementById('pseBank').value,
-      tipo_persona: document.getElementById('psePersonType').value,
-      tipo_documento: document.getElementById('pseDocType').value,
-      numero_documento: document.getElementById('pseDocNumber').value,
-      email_pse: document.getElementById('pseEmail').value
-    };
-  } else if (metodo_pago === 'TRANSFERENCIA') {
+    const rawNum = document.getElementById('cardNumber').value.replace(/\s+/g, '');
+    const titular = document.getElementById('cardHolder').value.trim();
+    const expiracion = document.getElementById('cardExp').value.trim();
+    const cvv = document.getElementById('cardCvv').value.trim();
+    const cuotas = document.getElementById('cardCuotas').value;
+
+    if (!/^\d{13,19}$/.test(rawNum)) {
+      showAlert('Numero de tarjeta invalido (debe tener entre 13 y 19 digitos).', 'warning', checkoutAlert);
+      return;
+    }
+    if (!titular) {
+      showAlert('Ingresa el nombre del titular de la tarjeta.', 'warning', checkoutAlert);
+      return;
+    }
+    if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(expiracion)) {
+      showAlert('Fecha de expiracion invalida (usa formato MM/AA).', 'warning', checkoutAlert);
+      return;
+    }
+    if (!/^\d{3,4}$/.test(cvv)) {
+      showAlert('Codigo CVV invalido (3 o 4 digitos).', 'warning', checkoutAlert);
+      return;
+    }
+
+    openThreeDsChallenge({
+      metodo_pago: 'TARJETA',
+      datos_pago: { numero_tarjeta: rawNum, titular, expiracion, cvv, cuotas },
+      codigo_cupon,
+      direccion_envio,
+      ciudad
+    });
+    return;
+  }
+
+  let datos_pago = {};
+  if (metodo_pago === 'TRANSFERENCIA') {
     datos_pago = {
       banco_origen: document.getElementById('transferBank').value,
       numero_comprobante: document.getElementById('transferRef').value
     };
   }
 
-  try {
-    const res = await apiRequest('/orders', {
-      method: 'POST',
-      body: JSON.stringify({
-        metodo_pago,
-        datos_pago,
-        codigo_cupon: appliedCoupon ? appliedCoupon.codigo : null,
-        direccion_envio: document.getElementById('shippingAddress').value,
-        ciudad: document.getElementById('shippingCity').value
-      })
-    });
-    clearAppliedCoupon();
-    bootstrap.Offcanvas.getInstance(document.getElementById('cartOffcanvas')).hide();
-    await loadCart();
-    await loadBooks();
-
-    document.getElementById('orderSuccessMessage').innerHTML =
-      `Tu pedido <strong>${res.data.numero_orden}</strong> fue registrado por <strong>${formatCurrency(res.data.total)}</strong>.`;
-    document.getElementById('orderSuccessInvoiceLink').href = `factura.html?orderId=${res.data.id}`;
-    new bootstrap.Modal(document.getElementById('orderSuccessModal')).show();
-  } catch (error) {
-    showAlert(error.message, 'danger');
-  }
+  await finalizeOrderSubmission({
+    metodo_pago,
+    datos_pago,
+    codigo_cupon,
+    direccion_envio,
+    ciudad
+  });
 });
+
+function handleReturnedPayment() {
+  const raw = sessionStorage.getItem('pds_payment_result');
+  if (!raw) return;
+  sessionStorage.removeItem('pds_payment_result');
+
+  if (window.location.search.includes('payment=')) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
+  try {
+    const result = JSON.parse(raw);
+    if (result.status === 'APPROVED' && result.order) {
+      const ord = result.order;
+      const cus = ord.pago && ord.pago.detalle_pago
+        ? (() => {
+            try {
+              const d = typeof ord.pago.detalle_pago === 'string' ? JSON.parse(ord.pago.detalle_pago) : ord.pago.detalle_pago;
+              return d.cus_simulado || '';
+            } catch {
+              return '';
+            }
+          })()
+        : '';
+      document.getElementById('orderSuccessMessage').innerHTML =
+        `Pago PSE aprobado por <strong>${result.bank || 'tu entidad bancaria'}</strong>.<br>Pedido <strong>${ord.numero_orden}</strong> por <strong>${formatCurrency(ord.total)}</strong>${cus ? `<br><span class="small text-muted">Comprobante PSE: <strong>${cus}</strong></span>` : ''}`;
+      document.getElementById('orderSuccessInvoiceLink').href = `factura.html?orderId=${ord.id}`;
+      new bootstrap.Modal(document.getElementById('orderSuccessModal')).show();
+    } else if (result.status === 'REJECTED') {
+      showAlert(`<strong>Pago rechazado (${result.bank || 'PSE'}):</strong> ${result.reason || 'Transaccion no aprobada.'}`, 'danger');
+    } else if (result.status === 'CANCELLED') {
+      showAlert(result.reason || 'Operacion cancelada en el portal bancario.', 'warning');
+    }
+  } catch {
+    // Ignorar formato invalido
+  }
+}
 
 // --- Biblioteca e Historial ---
 
@@ -1121,6 +1482,7 @@ async function initStore() {
   updateAuthUI();
   await Promise.all([loadMetadata(), loadFavoritesIds(), loadCart()]);
   await loadBooks();
+  handleReturnedPayment();
 }
 
 initStore();
