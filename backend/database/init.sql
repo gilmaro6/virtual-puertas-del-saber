@@ -228,6 +228,22 @@ CREATE TABLE IF NOT EXISTS resenas (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS favoritos (
+  usuario_id CHAR(36) NOT NULL,
+  libro_id CHAR(36) NOT NULL,
+  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (usuario_id, libro_id),
+  KEY idx_favoritos_libro (libro_id),
+  CONSTRAINT fk_favoritos_usuario
+    FOREIGN KEY (usuario_id) REFERENCES usuarios (id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT fk_favoritos_libro
+    FOREIGN KEY (libro_id) REFERENCES libros (id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ==========================================================
 -- 3. MODULO DE CARRITO, COMPRAS, ALQUILERES Y PAGOS
 -- ==========================================================

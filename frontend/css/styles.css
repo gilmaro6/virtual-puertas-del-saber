@@ -1,5 +1,6 @@
 :root {
   --pds-primary: #142D4E;
+  --pds-primary-dark: #0e2038;
   --pds-secondary: #2878D0;
   --pds-accent: #F4B942;
   --pds-accent-hover: #dfa42c;
@@ -8,6 +9,7 @@
   --pds-text: #253449;
   --pds-border: #dce4f0;
   --pds-muted: #5a6a80;
+  --pds-sidebar-width: 248px;
 }
 
 html {
@@ -46,8 +48,8 @@ a:hover {
 }
 
 .brand-logo {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   object-fit: cover;
   border-radius: 50%;
   border: 2px solid var(--pds-accent);
@@ -101,6 +103,41 @@ a:hover {
   border-radius: 0.75rem;
 }
 
+/* Pills interactivas de categorias */
+.category-pills {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 0.5rem;
+  padding-bottom: 0.35rem;
+  scrollbar-width: thin;
+}
+
+.category-pill {
+  white-space: nowrap;
+  border: 1px solid var(--pds-border);
+  background-color: var(--pds-surface);
+  color: var(--pds-text);
+  border-radius: 999px;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.category-pill:hover {
+  border-color: var(--pds-secondary);
+  color: var(--pds-secondary);
+}
+
+.category-pill.active {
+  background-color: var(--pds-primary);
+  border-color: var(--pds-primary);
+  color: var(--pds-surface);
+}
+
+/* Tarjetas de libros */
 .book-card {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   border: 1px solid var(--pds-border);
@@ -116,7 +153,7 @@ a:hover {
 
 .book-cover-wrapper {
   position: relative;
-  height: 185px;
+  height: 190px;
   background: linear-gradient(160deg, #e9eff7 0%, #dce6f4 100%);
   border-bottom: 1px solid var(--pds-border);
   overflow: hidden;
@@ -149,6 +186,32 @@ a:hover {
   background-color: var(--pds-primary);
 }
 
+.fav-btn {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--pds-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.fav-btn:hover {
+  transform: scale(1.1);
+  color: #dc3545;
+}
+
+.fav-btn.is-fav {
+  color: #dc3545;
+}
+
 .book-thumb {
   width: 42px;
   height: 56px;
@@ -162,6 +225,20 @@ a:hover {
   font-weight: 700;
 }
 
+/* Skeleton de carga */
+.skeleton-box {
+  background: linear-gradient(90deg, #e9eff7 25%, #f4f7fb 50%, #e9eff7 75%);
+  background-size: 200% 100%;
+  animation: pdsShimmer 1.3s infinite;
+  border-radius: 0.35rem;
+}
+
+@keyframes pdsShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Botones de marca */
 .btn-pds {
   background-color: var(--pds-primary);
   border-color: var(--pds-primary);
@@ -199,20 +276,145 @@ a:hover {
   color: var(--pds-surface);
 }
 
-.nav-tabs-pds .nav-link {
-  color: var(--pds-primary);
-  font-weight: 500;
-}
-
-.nav-tabs-pds .nav-link.active {
-  background-color: var(--pds-primary);
-  color: var(--pds-surface);
-  border-color: var(--pds-primary);
-}
-
 .table thead th {
   background-color: #e9eff7;
   color: var(--pds-primary);
   font-weight: 600;
   border-bottom: 2px solid var(--pds-border);
+}
+
+/* Layout Administrativo Profesional con Sidebar */
+.admin-shell {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--pds-bg);
+}
+
+.admin-sidebar {
+  width: var(--pds-sidebar-width);
+  background: linear-gradient(180deg, var(--pds-primary) 0%, var(--pds-primary-dark) 100%);
+  color: #ffffff;
+  border-right: 3px solid var(--pds-accent);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: transform 0.22s ease, margin-left 0.22s ease;
+  z-index: 1040;
+}
+
+.admin-sidebar-brand {
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.admin-sidebar-group {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 0.9rem 1.25rem 0.35rem;
+  font-weight: 600;
+}
+
+.admin-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.82);
+  padding: 0.62rem 1.25rem;
+  font-size: 0.92rem;
+  font-weight: 500;
+  border-left: 3px solid transparent;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.admin-nav-btn:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.admin-nav-btn.active {
+  background-color: rgba(244, 185, 66, 0.16);
+  color: var(--pds-accent);
+  border-left-color: var(--pds-accent);
+  font-weight: 600;
+}
+
+.admin-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-topbar {
+  background-color: var(--pds-surface);
+  border-bottom: 1px solid var(--pds-border);
+  padding: 0.75rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 1020;
+}
+
+.admin-content {
+  padding: 1.5rem;
+  flex: 1 0 auto;
+}
+
+.kpi-card {
+  background-color: var(--pds-surface);
+  border: 1px solid var(--pds-border);
+  border-radius: 0.75rem;
+  padding: 1rem 1.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.kpi-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.admin-sidebar.collapsed {
+  margin-left: calc(var(--pds-sidebar-width) * -1);
+}
+
+@media (max-width: 991.98px) {
+  .admin-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-100%);
+    margin-left: 0 !important;
+  }
+  .admin-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+  .admin-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(14, 32, 56, 0.45);
+    z-index: 1035;
+    display: none;
+  }
+  .admin-backdrop.show {
+    display: block;
+  }
 }

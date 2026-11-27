@@ -3,7 +3,15 @@ const resultsCount = document.getElementById('resultsCount');
 const alertContainer = document.getElementById('alertContainer');
 const categoryFilter = document.getElementById('categoryFilter');
 const formatFilter = document.getElementById('formatFilter');
+const sortFilter = document.getElementById('sortFilter');
 const searchInput = document.getElementById('searchInput');
+const categoryPills = document.getElementById('categoryPills');
+const booksPagination = document.getElementById('booksPagination');
+
+let currentPage = 1;
+const PAGE_LIMIT = 8;
+let favoriteBookIds = new Set();
+let searchDebounceTimer = null;
 
 function showAlert(message, type = 'info', target = alertContainer) {
   if (target !== alertContainer) {
@@ -54,6 +62,20 @@ function updateAuthUI() {
   }
 }
 
+function syncCategoryPills() {
+  const selected = String(categoryFilter.value || '');
+  categoryPills.querySelectorAll('.category-pill').forEach((btn) => {
+    btn.classList.toggle('active', String(btn.dataset.cat) === selected);
+  });
+}
+
+function selectCategoryPill(catId) {
+  categoryFilter.value = catId;
+  syncCategoryPills();
+  currentPage = 1;
+  loadBooks();
+}
+
 async function loadMetadata() {
   try {
     const res = await apiRequest('/books/meta');
@@ -73,9 +95,122 @@ async function loadMetadata() {
       opt.textContent = fmt.nombre;
       formatFilter.appendChild(opt);
     });
+
+    categoryPills.innerHTML = [
+      `<button type="button" class="category-pill active" data-cat="" onclick="selectCategoryPill('')"><i class="bi bi-grid"></i> Todas</button>`,
+      ...categories.map((cat) => `
+        <button type="button" class="category-pill" data-cat="${cat.id}" onclick="selectCategoryPill('${cat.id}')">
+          ${cat.nombre}
+        </button>
+      `)
+    ].join('');
   } catch (error) {
     showAlert(error.message, 'warning');
   }
+}
+
+async function loadFavoritesIds() {
+  const badge = document.getElementById('favCountBadge');
+  if (!getToken()) {
+    favoriteBookIds = new Set();
+    if (badge) badge.textContent = '0';
+    return;
+  }
+
+  try {
+    const res = await apiRequest('/books/favorites/my');
+    const items = res.data || [];
+    favoriteBookIds = new Set(items.map((item) => item.id));
+    if (badge) badge.textContent = String(favoriteBookIds.size);
+  } catch {
+    favoriteBookIds = new Set();
+    if (badge) badge.textContent = '0';
+  }
+}
+
+async function toggleFavorite(bookId) {
+  if (!getToken()) {
+    new bootstrap.Modal(document.getElementById('authModal')).show();
+    return;
+  }
+
+  try {
+    const res = await apiRequest(`/books/${bookId}/favorite`, { method: 'POST' });
+    const isFav = Boolean(res.data.isFavorite);
+
+    if (isFav) {
+      favoriteBookIds.add(bookId);
+      showAlert('Libro agregado a tus favoritos.', 'success');
+    } else {
+      favoriteBookIds.delete(bookId);
+      showAlert('Libro eliminado de tus favoritos.', 'info');
+    }
+
+    const badge = document.getElementById('favCountBadge');
+    if (badge) badge.textContent = String(favoriteBookIds.size);
+
+    document.querySelectorAll(`.fav-btn[data-book-id="${bookId}"]`).forEach((btn) => {
+      btn.classList.toggle('is-fav', isFav);
+      btn.title = isFav ? 'Quitar de favoritos' : 'Guardar en favoritos';
+      const icon = btn.querySelector('i');
+      if (icon) icon.className = `bi bi-heart${isFav ? '-fill' : ''}`;
+    });
+  } catch (error) {
+    showAlert(error.message, 'danger');
+  }
+}
+
+function renderBooksSkeleton() {
+  booksGrid.innerHTML = Array.from({ length: 4 }).map(() => `
+    <div class="col-12 col-sm-6 col-md-4 col-xl-3">
+      <div class="card h-100 book-card p-3">
+        <div class="skeleton-box mb-3" style="height: 165px;"></div>
+        <div class="skeleton-box mb-2" style="height: 14px; width: 45%;"></div>
+        <div class="skeleton-box mb-2" style="height: 18px; width: 90%;"></div>
+        <div class="skeleton-box mb-3" style="height: 14px; width: 65%;"></div>
+        <div class="skeleton-box mt-auto" style="height: 34px; width: 100%;"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderPagination(pagination) {
+  if (!pagination || pagination.totalPages <= 1) {
+    booksPagination.innerHTML = '';
+    return;
+  }
+
+  const { page, totalPages } = pagination;
+  const items = [];
+
+  items.push(`
+    <li class="page-item ${page <= 1 ? 'disabled' : ''}">
+      <button class="page-link" type="button" onclick="goToPage(${page - 1})">Anterior</button>
+    </li>
+  `);
+
+  for (let p = 1; p <= totalPages; p += 1) {
+    items.push(`
+      <li class="page-item ${p === page ? 'active' : ''}">
+        <button class="page-link" type="button" onclick="goToPage(${p})">${p}</button>
+      </li>
+    `);
+  }
+
+  items.push(`
+    <li class="page-item ${page >= totalPages ? 'disabled' : ''}">
+      <button class="page-link" type="button" onclick="goToPage(${page + 1})">Siguiente</button>
+    </li>
+  `);
+
+  booksPagination.innerHTML = items.join('');
+}
+
+function goToPage(page) {
+  if (page < 1) return;
+  currentPage = page;
+  loadBooks();
+  window.scrollTo({ top: 180, behavior: 'smooth' });
 }
 
 async function loadBooks() {
@@ -83,60 +218,79 @@ async function loadBooks() {
   if (searchInput.value.trim()) params.append('q', searchInput.value.trim());
   if (categoryFilter.value) params.append('categoria', categoryFilter.value);
   if (formatFilter.value) params.append('formato', formatFilter.value);
+  if (sortFilter.value) params.append('sort', sortFilter.value);
+  params.append('page', String(currentPage));
+  params.append('limit', String(PAGE_LIMIT));
+
+  renderBooksSkeleton();
 
   try {
     const res = await apiRequest(`/books?${params.toString()}`);
     const items = res.data.items || [];
-    resultsCount.textContent = `${items.length} libro(s) encontrado(s)`;
+    const pagination = res.data.pagination || { total: items.length, page: 1, totalPages: 1 };
+
+    resultsCount.textContent = pagination.total > 0
+      ? `Mostrando ${items.length} de ${pagination.total} libro(s)`
+      : '0 libros encontrados';
+
+    renderPagination(pagination);
 
     if (items.length === 0) {
       booksGrid.innerHTML = '<div class="col-12"><div class="alert alert-light border text-center">No se encontraron libros con los filtros seleccionados.</div></div>';
       return;
     }
 
-    booksGrid.innerHTML = items.map((book) => `
-      <div class="col-12 col-sm-6 col-md-4 col-xl-3">
-        <div class="card h-100 book-card">
-          <div class="book-cover-wrapper">
-            ${book.portada_url
-              ? `<img src="${book.portada_url}" alt="${book.titulo}" class="book-cover-img" onerror="this.outerHTML='<div class=\\'book-cover-placeholder\\'><i class=\\'bi bi-journal-bookmark fs-1 mb-2\\'></i><span class=\\'small\\'>Sin portada</span></div>'">`
-              : `<div class="book-cover-placeholder"><i class="bi bi-journal-bookmark fs-1 mb-2"></i><span class="small fw-medium">${book.categoria_nombre || 'Danzara'}</span></div>`
-            }
-            <span class="badge badge-formato">${book.formato}</span>
-          </div>
-          <div class="card-body p-3 d-flex flex-column">
-            <div class="d-flex justify-content-between align-items-start mb-1">
-              <span class="badge bg-secondary-subtle text-dark">${book.categoria_nombre || 'General'}</span>
-              <span class="small text-warning fw-semibold"><i class="bi bi-star-fill"></i> ${book.calificacion_promedio}</span>
+    booksGrid.innerHTML = items.map((book) => {
+      const isFav = favoriteBookIds.has(book.id);
+      return `
+        <div class="col-12 col-sm-6 col-md-4 col-xl-3">
+          <div class="card h-100 book-card">
+            <div class="book-cover-wrapper">
+              ${book.portada_url
+                ? `<img src="${book.portada_url}" alt="${book.titulo}" class="book-cover-img" onerror="this.outerHTML='<div class=\\'book-cover-placeholder\\'><i class=\\'bi bi-journal-bookmark fs-1 mb-2\\'></i><span class=\\'small\\'>Sin portada</span></div>'">`
+                : `<div class="book-cover-placeholder"><i class="bi bi-journal-bookmark fs-1 mb-2"></i><span class="small fw-medium">${book.categoria_nombre || 'Danzara'}</span></div>`
+              }
+              <button type="button" class="fav-btn ${isFav ? 'is-fav' : ''}" data-book-id="${book.id}" onclick="toggleFavorite('${book.id}')" title="${isFav ? 'Quitar de favoritos' : 'Guardar en favoritos'}">
+                <i class="bi bi-heart${isFav ? '-fill' : ''}"></i>
+              </button>
+              <span class="badge badge-formato">${book.formato}</span>
             </div>
-            <h6 class="card-title book-title fw-bold mb-1">${book.titulo}</h6>
-            <p class="text-muted small mb-1">${book.autor_nombre || 'Autor por definir'}</p>
-            <p class="card-text small text-secondary flex-grow-1 mb-2">${book.sinopsis ? book.sinopsis.slice(0, 75) + '...' : ''}</p>
-            <div class="border-top pt-2 mt-auto">
-              <div class="d-flex justify-content-between small mb-2">
-                <span>Compra: <strong class="price-tag">${formatCurrency(book.precio_venta)}</strong></span>
-                <span>Alquiler: <strong>${formatCurrency(book.precio_alquiler)}</strong></span>
+            <div class="card-body p-3 d-flex flex-column">
+              <div class="d-flex justify-content-between align-items-start mb-1">
+                <span class="badge bg-secondary-subtle text-dark">${book.categoria_nombre || 'General'}</span>
+                <span class="small text-warning fw-semibold"><i class="bi bi-star-fill"></i> ${book.calificacion_promedio}</span>
               </div>
-              <div class="d-flex gap-1">
-                <button class="btn btn-pds btn-sm flex-grow-1" onclick="addToCart('${book.id}', 'COMPRA', true)">
-                  <i class="bi bi-bag-check"></i> Comprar
-                </button>
-                <button class="btn btn-outline-primary btn-sm" onclick="addToCart('${book.id}', 'ALQUILER', true)">
-                  Alquilar
-                </button>
-                <button class="btn btn-gold btn-sm" onclick="addToCart('${book.id}', 'COMPRA', false)" title="Agregar al carrito y seguir viendo">
-                  <i class="bi bi-cart-plus"></i>
-                </button>
-                <button class="btn btn-outline-secondary btn-sm" onclick="openBookDetail('${book.id}')" title="Ver detalle">
-                  <i class="bi bi-eye"></i>
-                </button>
+              <h6 class="card-title book-title fw-bold mb-1">${book.titulo}</h6>
+              <p class="text-muted small mb-1">${book.autor_nombre || 'Autor por definir'}</p>
+              <p class="card-text small text-secondary flex-grow-1 mb-2">${book.sinopsis ? book.sinopsis.slice(0, 75) + '...' : ''}</p>
+              <div class="border-top pt-2 mt-auto">
+                <div class="d-flex justify-content-between small mb-2">
+                  <span>Compra: <strong class="price-tag">${formatCurrency(book.precio_venta)}</strong></span>
+                  <span>Alquiler: <strong>${formatCurrency(book.precio_alquiler)}</strong></span>
+                </div>
+                <div class="d-flex gap-1">
+                  <button class="btn btn-pds btn-sm flex-grow-1" onclick="addToCart('${book.id}', 'COMPRA', true)">
+                    <i class="bi bi-bag-check"></i> Comprar
+                  </button>
+                  <button class="btn btn-outline-primary btn-sm" onclick="addToCart('${book.id}', 'ALQUILER', true)">
+                    Alquilar
+                  </button>
+                  <button class="btn btn-gold btn-sm" onclick="addToCart('${book.id}', 'COMPRA', false)" title="Agregar al carrito y seguir viendo">
+                    <i class="bi bi-cart-plus"></i>
+                  </button>
+                  <button class="btn btn-outline-secondary btn-sm" onclick="openBookDetail('${book.id}')" title="Ver detalle">
+                    <i class="bi bi-eye"></i>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   } catch (error) {
+    booksGrid.innerHTML = '';
+    booksPagination.innerHTML = '';
     showAlert(error.message, 'danger');
   }
 }
@@ -365,7 +519,8 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     saveSession(res.data.token, res.data.user);
     bootstrap.Modal.getInstance(document.getElementById('authModal')).hide();
     updateAuthUI();
-    await loadCart();
+    await Promise.all([loadCart(), loadFavoritesIds()]);
+    await loadBooks();
     showAlert(`Bienvenido, ${res.data.user.nombre}.`, 'success');
   } catch (error) {
     showAlert(error.message, 'danger', authAlert);
@@ -392,7 +547,8 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     saveSession(res.data.token, res.data.user);
     bootstrap.Modal.getInstance(document.getElementById('authModal')).hide();
     updateAuthUI();
-    await loadCart();
+    await Promise.all([loadCart(), loadFavoritesIds()]);
+    await loadBooks();
     showAlert('Cuenta creada correctamente.', 'success');
   } catch (error) {
     showAlert(error.message, 'danger', authAlert);
@@ -409,9 +565,135 @@ document.getElementById('logoutBtn').addEventListener('click', async (e) => {
   }
   clearSession();
   updateAuthUI();
-  await loadCart();
+  await Promise.all([loadCart(), loadFavoritesIds()]);
+  await loadBooks();
   showAlert('Sesion cerrada.', 'info');
 });
+
+// --- Mi Perfil ---
+
+document.getElementById('openProfileBtn').addEventListener('click', async (e) => {
+  e.preventDefault();
+  document.getElementById('profileAlert').innerHTML = '';
+  document.getElementById('profilePassCurrent').value = '';
+  document.getElementById('profilePassNew').value = '';
+
+  const modal = new bootstrap.Modal(document.getElementById('profileModal'));
+  modal.show();
+
+  try {
+    const res = await apiRequest('/auth/profile');
+    const p = res.data;
+    document.getElementById('profileEmail').textContent = p.email;
+    document.getElementById('profileRole').textContent = p.rol;
+    document.getElementById('profileDoc').textContent = p.documento_identidad || 'No registrado';
+    document.getElementById('profileNombre').value = p.nombre || '';
+    document.getElementById('profileApellido').value = p.apellido || '';
+    document.getElementById('profileTelefono').value = p.telefono || '';
+  } catch (error) {
+    showAlert(error.message, 'danger', document.getElementById('profileAlert'));
+  }
+});
+
+document.getElementById('profileForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const profileAlert = document.getElementById('profileAlert');
+  const payload = {
+    nombre: document.getElementById('profileNombre').value,
+    apellido: document.getElementById('profileApellido').value,
+    telefono: document.getElementById('profileTelefono').value
+  };
+
+  const passNew = document.getElementById('profilePassNew').value;
+  if (passNew) {
+    payload.passwordActual = document.getElementById('profilePassCurrent').value;
+    payload.passwordNueva = passNew;
+  }
+
+  try {
+    const res = await apiRequest('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+    const updated = res.data;
+    const stored = getStoredUser();
+    if (stored) {
+      stored.nombre = updated.nombre;
+      stored.apellido = updated.apellido;
+      saveSession(getToken(), stored);
+      updateAuthUI();
+    }
+    bootstrap.Modal.getInstance(document.getElementById('profileModal')).hide();
+    showAlert('Perfil actualizado correctamente.', 'success');
+  } catch (error) {
+    showAlert(error.message, 'danger', profileAlert);
+  }
+});
+
+// --- Mis Favoritos ---
+
+async function openFavoritesModal() {
+  const body = document.getElementById('accountModalBody');
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('accountModal'));
+  document.querySelector('#accountModal .modal-title').textContent = 'Mis Libros Favoritos';
+  body.innerHTML = '<p class="text-muted">Cargando favoritos...</p>';
+  modal.show();
+
+  try {
+    const res = await apiRequest('/books/favorites/my');
+    const items = res.data || [];
+    favoriteBookIds = new Set(items.map((item) => item.id));
+    document.getElementById('favCountBadge').textContent = String(favoriteBookIds.size);
+
+    if (items.length === 0) {
+      body.innerHTML = '<div class="alert alert-light border text-center mb-0">Aun no has guardado libros en tu lista de favoritos.</div>';
+      return;
+    }
+
+    body.innerHTML = `
+      <div class="row g-3">
+        ${items.map((book) => `
+          <div class="col-md-6">
+            <div class="card border h-100">
+              <div class="card-body p-2 d-flex gap-2 align-items-center">
+                ${book.portada_url
+                  ? `<img src="${book.portada_url}" alt="${book.titulo}" class="book-thumb">`
+                  : '<div class="book-thumb d-flex align-items-center justify-content-center bg-light text-muted"><i class="bi bi-book"></i></div>'
+                }
+                <div class="flex-grow-1 min-w-0">
+                  <div class="fw-bold small text-truncate">${book.titulo}</div>
+                  <div class="text-muted small text-truncate">${book.autor_nombre || 'Autor por definir'}</div>
+                  <div class="small mt-1">
+                    <strong class="price-tag">${formatCurrency(book.precio_venta)}</strong>
+                    <span class="text-muted ms-1">| Alq: ${formatCurrency(book.precio_alquiler)}</span>
+                  </div>
+                </div>
+                <div class="d-flex flex-column gap-1">
+                  <button class="btn btn-pds btn-sm" onclick="addToCart('${book.id}', 'COMPRA', true)" title="Comprar"><i class="bi bi-cart-plus"></i></button>
+                  <button class="btn btn-outline-danger btn-sm" onclick="removeFavoriteFromModal('${book.id}')" title="Quitar"><i class="bi bi-heartbreak"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } catch (error) {
+    body.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+  }
+}
+
+async function removeFavoriteFromModal(bookId) {
+  await toggleFavorite(bookId);
+  await openFavoritesModal();
+}
+
+document.getElementById('openFavoritesBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  openFavoritesModal();
+});
+
+// --- Pasarela de Pagos ---
 
 const paymentMethods = ['TARJETA', 'PSE', 'TRANSFERENCIA', 'EFECTIVO'];
 let currentPayIndex = 0;
@@ -499,10 +781,12 @@ document.getElementById('checkoutForm').addEventListener('submit', async (e) => 
   }
 });
 
+// --- Biblioteca e Historial ---
+
 document.getElementById('openLibraryBtn').addEventListener('click', async (e) => {
   e.preventDefault();
   const body = document.getElementById('accountModalBody');
-  const modal = new bootstrap.Modal(document.getElementById('accountModal'));
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('accountModal'));
   document.querySelector('#accountModal .modal-title').textContent = 'Mi Biblioteca Digital';
   body.innerHTML = '<p class="text-muted">Cargando biblioteca...</p>';
   modal.show();
@@ -545,7 +829,8 @@ document.getElementById('openLibraryBtn').addEventListener('click', async (e) =>
 document.getElementById('openAccountBtn').addEventListener('click', async (e) => {
   e.preventDefault();
   const body = document.getElementById('accountModalBody');
-  const modal = new bootstrap.Modal(document.getElementById('accountModal'));
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('accountModal'));
+  document.querySelector('#accountModal .modal-title').textContent = 'Mi Historial de Pedidos y Alquileres';
   body.innerHTML = '<p class="text-muted">Cargando historial...</p>';
   modal.show();
 
@@ -610,19 +895,57 @@ document.getElementById('openAccountBtn').addEventListener('click', async (e) =>
   }
 });
 
+// --- Eventos de busqueda y filtros ---
+
 document.getElementById('searchForm').addEventListener('submit', (e) => {
   e.preventDefault();
+  currentPage = 1;
   loadBooks();
 });
-document.getElementById('applyFiltersBtn').addEventListener('click', loadBooks);
+
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => {
+    currentPage = 1;
+    loadBooks();
+  }, 350);
+});
+
+categoryFilter.addEventListener('change', () => {
+  syncCategoryPills();
+  currentPage = 1;
+  loadBooks();
+});
+
+formatFilter.addEventListener('change', () => {
+  currentPage = 1;
+  loadBooks();
+});
+
+sortFilter.addEventListener('change', () => {
+  currentPage = 1;
+  loadBooks();
+});
+
+document.getElementById('applyFiltersBtn').addEventListener('click', () => {
+  currentPage = 1;
+  loadBooks();
+});
+
 document.getElementById('clearFiltersBtn').addEventListener('click', () => {
   searchInput.value = '';
   categoryFilter.value = '';
   formatFilter.value = '';
+  sortFilter.value = 'recent';
+  syncCategoryPills();
+  currentPage = 1;
   loadBooks();
 });
 
-updateAuthUI();
-loadMetadata();
-loadBooks();
-loadCart();
+async function initStore() {
+  updateAuthUI();
+  await Promise.all([loadMetadata(), loadFavoritesIds(), loadCart()]);
+  await loadBooks();
+}
+
+initStore();

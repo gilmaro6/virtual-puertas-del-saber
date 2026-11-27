@@ -5,6 +5,7 @@ let cachedAllPermissions = [];
 let cachedMeta = { categorias: [], autores: [], editoriales: [], formatos: [] };
 let salesChartInstance = null;
 let categoryChartInstance = null;
+let bookSearchTimer = null;
 
 function showAdminAlert(message, type = 'info') {
   adminAlert.innerHTML = `
@@ -22,33 +23,142 @@ function hasPerm(permCode) {
   return (user.permisos || []).includes(permCode);
 }
 
+function closeMobileSidebar() {
+  document.getElementById('adminSidebar').classList.remove('mobile-open');
+  document.getElementById('adminBackdrop').classList.remove('show');
+}
+
+function switchAdminSection(sectionId) {
+  const targetSection = document.getElementById(sectionId);
+  if (!targetSection) return;
+
+  document.querySelectorAll('.admin-section').forEach((sec) => sec.classList.add('d-none'));
+  targetSection.classList.remove('d-none');
+
+  document.querySelectorAll('#adminSidebarNav .admin-nav-btn').forEach((btn) => {
+    const isActive = btn.dataset.section === sectionId;
+    btn.classList.toggle('active', isActive);
+    if (isActive && btn.dataset.label) {
+      document.getElementById('adminSectionTitle').textContent = btn.dataset.label;
+    }
+  });
+
+  closeMobileSidebar();
+}
+
+function applySidebarPermissions() {
+  let firstVisibleSection = null;
+  const visibleGroups = new Set();
+
+  document.querySelectorAll('#adminSidebarNav .admin-nav-btn').forEach((btn) => {
+    const reqs = (btn.dataset.perm || '').split(',').filter(Boolean);
+    const allowed = reqs.length === 0 || reqs.some((p) => hasPerm(p));
+    if (!allowed) {
+      btn.classList.add('d-none');
+    } else {
+      btn.classList.remove('d-none');
+      if (btn.dataset.group) visibleGroups.add(btn.dataset.group);
+      if (!firstVisibleSection) firstVisibleSection = btn.dataset.section;
+    }
+  });
+
+  document.querySelectorAll('#adminSidebarNav .admin-sidebar-group').forEach((grp) => {
+    grp.classList.toggle('d-none', !visibleGroups.has(grp.dataset.group));
+  });
+
+  if (firstVisibleSection) {
+    switchAdminSection(firstVisibleSection);
+  }
+}
+
+function initSidebarControls() {
+  const sidebar = document.getElementById('adminSidebar');
+  const backdrop = document.getElementById('adminBackdrop');
+
+  document.getElementById('sidebarToggleBtn').addEventListener('click', () => {
+    if (window.innerWidth < 992) {
+      sidebar.classList.toggle('mobile-open');
+      backdrop.classList.toggle('show', sidebar.classList.contains('mobile-open'));
+    } else {
+      sidebar.classList.toggle('collapsed');
+    }
+  });
+
+  backdrop.addEventListener('click', closeMobileSidebar);
+
+  document.querySelectorAll('#adminSidebarNav .admin-nav-btn').forEach((btn) => {
+    btn.addEventListener('click', () => switchAdminSection(btn.dataset.section));
+  });
+
+  document.getElementById('goToDashboardAlertsBtn').addEventListener('click', () => {
+    if (hasPerm('DASHBOARD_VER')) {
+      switchAdminSection('dashboardTab');
+    }
+  });
+
+  document.getElementById('adminLogoutBtn').addEventListener('click', async () => {
+    try {
+      await apiRequest('/auth/logout', { method: 'POST' });
+    } catch {
+      // Continuar cierre de sesion local
+    }
+    clearSession();
+    window.location.href = 'index.html';
+  });
+}
+
 function checkAdminSession() {
   const user = getStoredUser();
   if (!getToken() || !user || !hasPerm('PANEL_ADMIN_ACCESO')) {
     window.location.href = 'index.html';
     return false;
   }
-  document.getElementById('adminRoleLabel').textContent = `Panel Administrativo (${user.rol})`;
-  applyTabPermissions();
+  document.getElementById('adminRoleLabel').textContent = `${user.nombre} · ${user.rol}`;
+  applySidebarPermissions();
   return true;
 }
 
-function applyTabPermissions() {
-  let firstVisibleActivated = false;
-  document.querySelectorAll('#adminTabs .nav-item').forEach((item) => {
-    const reqs = (item.dataset.perm || '').split(',').filter(Boolean);
-    const allowed = reqs.length === 0 || reqs.some((p) => hasPerm(p));
-    if (!allowed) {
-      item.classList.add('d-none');
-    } else if (!firstVisibleActivated) {
-      firstVisibleActivated = true;
-      const btn = item.querySelector('button');
-      if (btn) new bootstrap.Tab(btn).show();
-    }
-  });
-}
-
 // --- Dashboard y Reportes ---
+
+function renderAlertsBell(alertas) {
+  const stockAlerts = alertas.stock_bajo || [];
+  const rentalAlerts = alertas.alquileres_vencidos || [];
+  const total = stockAlerts.length + rentalAlerts.length;
+
+  const badge = document.getElementById('alertsBellBadge');
+  const summary = document.getElementById('alertsBellSummary');
+  const listEl = document.getElementById('alertsDropdownList');
+
+  summary.textContent = total;
+  if (total > 0) {
+    badge.textContent = total > 99 ? '99+' : String(total);
+    badge.classList.remove('d-none');
+  } else {
+    badge.classList.add('d-none');
+  }
+
+  if (total === 0) {
+    listEl.innerHTML = '<div class="text-muted text-center py-2">Sin alertas operativas pendientes.</div>';
+    return;
+  }
+
+  const itemsHtml = [
+    ...stockAlerts.slice(0, 4).map((b) => `
+      <div class="d-flex align-items-start gap-2 border-bottom py-1">
+        <i class="bi bi-exclamation-triangle-fill text-danger mt-1"></i>
+        <div><strong>Stock bajo:</strong> ${b.titulo} (${b.stock_fisico} und.)</div>
+      </div>
+    `),
+    ...rentalAlerts.slice(0, 4).map((r) => `
+      <div class="d-flex align-items-start gap-2 border-bottom py-1">
+        <i class="bi bi-clock-fill text-warning mt-1"></i>
+        <div><strong>Alquiler vencido:</strong> ${r.titulo} (${r.email})</div>
+      </div>
+    `)
+  ];
+
+  listEl.innerHTML = itemsHtml.join('');
+}
 
 async function loadDashboard() {
   if (!hasPerm('DASHBOARD_VER')) return;
@@ -57,31 +167,56 @@ async function loadDashboard() {
     const { kpis, alertas, graficas } = res.data;
 
     document.getElementById('kpiCards').innerHTML = `
-      <div class="col-6 col-lg-3">
-        <div class="card card-pds shadow-sm"><div class="card-body">
-          <div class="small text-muted">Ingresos Totales</div>
-          <div class="fs-4 fw-bold text-primary">${formatCurrency(kpis.ingresos_totales)}</div>
-        </div></div>
+      <div class="col-12 col-sm-6 col-xl-3">
+        <div class="kpi-card shadow-sm h-100">
+          <div>
+            <div class="small text-muted fw-medium">Ingresos Totales</div>
+            <div class="fs-4 fw-bold text-primary mt-1">${formatCurrency(kpis.ingresos_totales)}</div>
+          </div>
+          <div class="kpi-icon" style="background: rgba(20, 45, 78, 0.1); color: #142D4E;">
+            <i class="bi bi-cash-stack"></i>
+          </div>
+        </div>
       </div>
-      <div class="col-6 col-lg-3">
-        <div class="card card-pds shadow-sm"><div class="card-body">
-          <div class="small text-muted">Pedidos</div>
-          <div class="fs-4 fw-bold">${kpis.total_pedidos} <small class="fs-6 text-warning">(${kpis.pedidos_pendientes} pend.)</small></div>
-        </div></div>
+      <div class="col-12 col-sm-6 col-xl-3">
+        <div class="kpi-card shadow-sm h-100">
+          <div>
+            <div class="small text-muted fw-medium">Pedidos Registrados</div>
+            <div class="fs-4 fw-bold mt-1">${kpis.total_pedidos}</div>
+            <div class="small text-warning fw-semibold">${kpis.pedidos_pendientes} pendiente(s)</div>
+          </div>
+          <div class="kpi-icon" style="background: rgba(40, 120, 208, 0.12); color: #2878D0;">
+            <i class="bi bi-bag-check"></i>
+          </div>
+        </div>
       </div>
-      <div class="col-6 col-lg-3">
-        <div class="card card-pds shadow-sm"><div class="card-body">
-          <div class="small text-muted">Alquileres Activos</div>
-          <div class="fs-4 fw-bold text-success">${kpis.alquileres_activos} <small class="fs-6 text-danger">(${kpis.alquileres_vencidos} venc.)</small></div>
-        </div></div>
+      <div class="col-12 col-sm-6 col-xl-3">
+        <div class="kpi-card shadow-sm h-100">
+          <div>
+            <div class="small text-muted fw-medium">Alquileres Activos</div>
+            <div class="fs-4 fw-bold text-success mt-1">${kpis.alquileres_activos}</div>
+            <div class="small text-danger fw-semibold">${kpis.alquileres_vencidos} vencido(s)</div>
+          </div>
+          <div class="kpi-icon" style="background: rgba(25, 135, 84, 0.12); color: #198754;">
+            <i class="bi bi-journal-check"></i>
+          </div>
+        </div>
       </div>
-      <div class="col-6 col-lg-3">
-        <div class="card card-pds shadow-sm"><div class="card-body">
-          <div class="small text-muted">Catalogo / Usuarios</div>
-          <div class="fs-4 fw-bold">${kpis.total_libros} <small class="fs-6 text-muted">/ ${kpis.total_usuarios} usr.</small></div>
-        </div></div>
+      <div class="col-12 col-sm-6 col-xl-3">
+        <div class="kpi-card shadow-sm h-100">
+          <div>
+            <div class="small text-muted fw-medium">Catalogo / Usuarios</div>
+            <div class="fs-4 fw-bold mt-1">${kpis.total_libros} <span class="fs-6 text-muted fw-normal">libros</span></div>
+            <div class="small text-muted">${kpis.total_usuarios} usuarios registrados</div>
+          </div>
+          <div class="kpi-icon" style="background: rgba(244, 185, 66, 0.22); color: #9c6d00;">
+            <i class="bi bi-collection"></i>
+          </div>
+        </div>
       </div>
     `;
+
+    renderAlertsBell(alertas);
 
     document.getElementById('lowStockList').innerHTML = alertas.stock_bajo.length > 0
       ? alertas.stock_bajo.map((b) => `<div class="border-bottom py-1"><strong>${b.titulo}</strong>: ${b.stock_fisico} und. (min. ${b.stock_minimo})</div>`).join('')
@@ -97,7 +232,7 @@ async function loadDashboard() {
         type: 'bar',
         data: {
           labels: graficas.ventas_mes.map((v) => v.mes),
-          datasets: [{ label: 'Ventas (COP)', data: graficas.ventas_mes.map((v) => Number(v.total)), backgroundColor: '#142D4E' }]
+          datasets: [{ label: 'Ventas (COP)', data: graficas.ventas_mes.map((v) => Number(v.total)), backgroundColor: '#142D4E', borderRadius: 6 }]
         }
       });
 
@@ -278,11 +413,21 @@ async function deleteParam(type, id) {
 
 // --- Libros ---
 
-async function loadAdminBooks() {
+async function loadAdminBooks(q = '') {
   if (!hasPerm('CATALOGO_CREAR') && !hasPerm('CATALOGO_EDITAR')) return;
-  const res = await apiRequest('/books?limit=50');
+  const params = new URLSearchParams({ limit: '50' });
+  if (q && q.trim()) params.append('q', q.trim());
+
+  const res = await apiRequest(`/books?${params.toString()}`);
   const tbody = document.getElementById('adminBooksTable');
-  tbody.innerHTML = res.data.items.map((b) => `
+  const items = res.data.items || [];
+
+  if (items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">No se encontraron libros con ese criterio.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = items.map((b) => `
     <tr>
       <td>
         ${b.portada_url
@@ -299,12 +444,22 @@ async function loadAdminBooks() {
       <td><span class="badge bg-${b.estado === 'DISPONIBLE' ? 'success' : 'warning'}">${b.estado}</span></td>
       <td>
         <a href="visor.html?bookId=${b.id}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Previsualizar visor"><i class="bi bi-book-half"></i></a>
-        <button class="btn btn-sm btn-outline-primary" onclick="editBook('${b.id}')"><i class="bi bi-pencil"></i></button>
-        <button class="btn btn-sm btn-outline-danger" onclick="deleteBook('${b.id}')"><i class="bi bi-trash"></i></button>
+        <button class="btn btn-sm btn-outline-primary" onclick="editBook('${b.id}')" title="Editar"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteBook('${b.id}')" title="Descontinuar"><i class="bi bi-trash"></i></button>
       </td>
     </tr>
   `).join('');
 }
+
+document.getElementById('adminBookSearchForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  loadAdminBooks(document.getElementById('adminBookSearch').value);
+});
+
+document.getElementById('adminBookSearch').addEventListener('input', (e) => {
+  clearTimeout(bookSearchTimer);
+  bookSearchTimer = setTimeout(() => loadAdminBooks(e.target.value), 350);
+});
 
 function updateCoverPreview(url) {
   const preview = document.getElementById('bookCoverPreview');
@@ -354,7 +509,8 @@ async function deleteBook(id) {
   try {
     await apiRequest(`/books/${id}`, { method: 'DELETE' });
     showAdminAlert('Libro descontinuado correctamente.', 'success');
-    await loadAdminBooks();
+    await loadAdminBooks(document.getElementById('adminBookSearch').value);
+    await loadDashboard();
   } catch (error) {
     showAdminAlert(error.message, 'danger');
   }
@@ -388,9 +544,10 @@ document.getElementById('bookForm').addEventListener('submit', async (e) => {
       showAdminAlert('Libro creado correctamente.', 'success');
     }
     bootstrap.Modal.getInstance(document.getElementById('bookModal')).hide();
-    await loadAdminBooks();
+    await loadAdminBooks(document.getElementById('adminBookSearch').value);
     await loadMetaSelects();
     await loadInventoryHistory();
+    await loadDashboard();
   } catch (error) {
     showAdminAlert(error.message, 'danger');
   }
@@ -677,13 +834,20 @@ document.getElementById('userPasswordForm').addEventListener('submit', async (e)
 
 // --- Pedidos e Historial ---
 
-async function loadAdminOrders() {
+async function loadAdminOrders(estado = '') {
   if (!hasPerm('PEDIDOS_VER_TODOS')) return;
-  const res = await apiRequest('/orders');
+  const query = estado ? `?estado=${encodeURIComponent(estado)}` : '';
+  const res = await apiRequest(`/orders${query}`);
   const tbody = document.getElementById('adminOrdersTable');
   const states = ['PENDIENTE', 'PAGADO', 'EN_PREPARACION', 'ENVIADO', 'ENTREGADO', 'CANCELADO'];
+  const items = res.data || [];
 
-  tbody.innerHTML = res.data.map((o) => `
+  if (items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No hay pedidos para el estado seleccionado.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = items.map((o) => `
     <tr>
       <td><strong>${o.numero_orden}</strong></td>
       <td>${o.cliente_nombre} ${o.cliente_apellido}<br><small class="text-muted">${o.cliente_email}</small></td>
@@ -704,6 +868,10 @@ async function loadAdminOrders() {
   `).join('');
 }
 
+document.getElementById('adminOrderStatusFilter').addEventListener('change', (e) => {
+  loadAdminOrders(e.target.value);
+});
+
 async function changeOrderStatus(orderId, estado) {
   try {
     await apiRequest(`/orders/${orderId}/status`, {
@@ -711,8 +879,9 @@ async function changeOrderStatus(orderId, estado) {
       body: JSON.stringify({ estado, comentario: 'Actualizacion desde panel administrativo' })
     });
     showAdminAlert('Estado del pedido actualizado.', 'success');
-    await loadAdminOrders();
+    await loadAdminOrders(document.getElementById('adminOrderStatusFilter').value);
     await loadAuditHistory();
+    await loadDashboard();
   } catch (error) { showAdminAlert(error.message, 'danger'); }
 }
 
@@ -745,6 +914,8 @@ async function loadAuditHistory() {
     </tr>
   `).join('');
 }
+
+initSidebarControls();
 
 if (checkAdminSession()) {
   loadDashboard();

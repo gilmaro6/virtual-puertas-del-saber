@@ -27,7 +27,7 @@ async function ensureNoBooksLinked(column, id, entityLabel) {
   }
 }
 
-async function listBooks({ q, categoria, formato, estado, page = 1, limit = 12 }) {
+async function listBooks({ q, categoria, formato, estado, sort = 'recent', page = 1, limit = 12 }) {
   const conditions = [];
   const params = [];
 
@@ -54,6 +54,15 @@ async function listBooks({ q, categoria, formato, estado, page = 1, limit = 12 }
     conditions.push("estado != 'DESCONTINUADO'");
   }
 
+  const sortMap = {
+    recent: 'creado_en DESC',
+    price_asc: 'precio_venta ASC',
+    price_desc: 'precio_venta DESC',
+    rating: 'calificacion_promedio DESC, total_resenas DESC',
+    title: 'titulo ASC'
+  };
+  const orderBy = sortMap[sort] || sortMap.recent;
+
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const safeLimit = Math.min(Math.max(Number(limit) || 12, 1), 50);
   const safePage = Math.max(Number(page) || 1, 1);
@@ -66,7 +75,7 @@ async function listBooks({ q, categoria, formato, estado, page = 1, limit = 12 }
 
   const [rows] = await pool.query(
     `SELECT * FROM vw_catalogo_libros ${whereClause}
-     ORDER BY creado_en DESC
+     ORDER BY ${orderBy}
      LIMIT ? OFFSET ?`,
     [...params, safeLimit, offset]
   );
@@ -391,6 +400,38 @@ async function addOrUpdateReview(libroId, usuarioId, { calificacion, comentario 
   return getBookById(libroId);
 }
 
+async function getMyFavorites(usuarioId) {
+  const [rows] = await pool.query(
+    `SELECT v.*, fav.creado_en AS guardado_en
+     FROM favoritos fav
+     INNER JOIN vw_catalogo_libros v ON fav.libro_id = v.id
+     WHERE fav.usuario_id = ? AND v.estado != 'DESCONTINUADO'
+     ORDER BY fav.creado_en DESC`,
+    [usuarioId]
+  );
+  return rows;
+}
+
+async function toggleFavorite(libroId, usuarioId) {
+  const [books] = await pool.query('SELECT id FROM libros WHERE id = ?', [libroId]);
+  if (books.length === 0) {
+    throw new AppError('Libro no encontrado', 404);
+  }
+
+  const [existing] = await pool.query(
+    'SELECT usuario_id FROM favoritos WHERE usuario_id = ? AND libro_id = ?',
+    [usuarioId, libroId]
+  );
+
+  if (existing.length > 0) {
+    await pool.query('DELETE FROM favoritos WHERE usuario_id = ? AND libro_id = ?', [usuarioId, libroId]);
+    return { isFavorite: false };
+  }
+
+  await pool.query('INSERT INTO favoritos (usuario_id, libro_id) VALUES (?, ?)', [usuarioId, libroId]);
+  return { isFavorite: true };
+}
+
 // --- Parametrizacion: Categorias ---
 
 async function createCategory({ nombre, descripcion = null }) {
@@ -560,6 +601,8 @@ module.exports = {
   updateBook,
   deleteBook,
   addOrUpdateReview,
+  getMyFavorites,
+  toggleFavorite,
   createCategory,
   updateCategory,
   deleteCategory,

@@ -7,12 +7,14 @@ const router = express.Router();
 // Rutas publicas del catalogo
 router.get('/', bookController.listBooks);
 router.get('/meta', bookController.getCatalogMetadata);
+router.get('/favorites/my', verifyToken, bookController.getMyFavorites);
 router.get('/:id', bookController.getBookById);
 
 // Contenido editable para administrador/bibliotecario
 router.get('/:id/editor', verifyToken, requirePermission('CATALOGO_EDITAR'), bookController.getBookForEditor);
 
-// Resenas (usuarios autenticados con permiso)
+// Favoritos y resenas (usuarios autenticados)
+router.post('/:id/favorite', verifyToken, bookController.toggleFavorite);
 router.post('/:id/reviews', verifyToken, requirePermission('ESCRIBIR_RESENAS'), bookController.addOrUpdateReview);
 
 // Parametrizacion del catalogo

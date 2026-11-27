@@ -72,6 +72,28 @@ async function addOrUpdateReview(req, res, next) {
   }
 }
 
+async function getMyFavorites(req, res, next) {
+  try {
+    const items = await bookService.getMyFavorites(req.user.id);
+    res.status(200).json({ status: 'ok', data: items });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function toggleFavorite(req, res, next) {
+  try {
+    const result = await bookService.toggleFavorite(req.params.id, req.user.id);
+    res.status(200).json({
+      status: 'ok',
+      message: result.isFavorite ? 'Libro guardado en favoritos' : 'Libro eliminado de favoritos',
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function createCategory(req, res, next) {
   try {
     const category = await bookService.createCategory(req.body);
@@ -189,6 +211,8 @@ module.exports = {
   updateBook,
   deleteBook,
   addOrUpdateReview,
+  getMyFavorites,
+  toggleFavorite,
   createCategory,
   updateCategory,
   deleteCategory,
